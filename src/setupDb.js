@@ -7,12 +7,15 @@ const setupDatabase = async () => {
         console.log('Connection has been established successfully.');
 
         // For PostGIS: We need to ensure the extension exists
-        // Note: This requires superuser privileges or specific permissions
-        try {
-            await sequelize.query('CREATE EXTENSION IF NOT EXISTS postgis;');
-            console.log('PostGIS extension ensured.');
-        } catch (e) {
-            console.warn('Could not create PostGIS extension. Ensure it is enabled in your database.');
+        if (sequelize.getDialect() === 'postgres') {
+            try {
+                await sequelize.query('CREATE EXTENSION IF NOT EXISTS postgis;');
+                console.log('PostGIS extension ensured.');
+            } catch (e) {
+                console.warn('Could not create PostGIS extension. Ensure it is enabled in your database.');
+            }
+        } else {
+            console.log('Using SQLite - skipping PostGIS extension.');
         }
 
         console.log('Syncing models with database...');
