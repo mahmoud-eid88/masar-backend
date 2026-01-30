@@ -111,7 +111,18 @@ exports.updateOrderStatus = async (req, res) => {
 };
 
 exports.getNearbyOrders = async (req, res) => {
-    // Logic for finding nearby orders based on courier location
-    // Typically uses ST_Distance or similar in PostGIS
-    res.json({ success: true, orders: [] });
+    try {
+        const { lat, lng, radius = 5000 } = req.query; // radius in meters (not used in simple version)
+
+        // For now, return all waiting orders. 
+        // In a real app, we'd use Pythagoras or PostGIS.
+        const orders = await Order.findAll({
+            where: { status: 'waiting' },
+            include: [{ model: Customer, attributes: ['name', 'phone'] }]
+        });
+
+        res.json({ success: true, orders });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
 };
