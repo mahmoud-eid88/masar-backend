@@ -7,6 +7,21 @@ exports.createOrder = async (req, res) => {
         // pickup_location and dropoff_location should be { lat, lng } or similar
         // For Sequelize GEOMETRY, we need { type: 'Point', coordinates: [lng, lat] }
 
+        // Check active orders limit for customer (max 4)
+        const activeOrdersCount = await Order.count({
+            where: {
+                customer_id,
+                status: ['waiting', 'accepted', 'picked_up', 'in_delivery']
+            }
+        });
+
+        if (activeOrdersCount >= 4) {
+            return res.status(400).json({
+                success: false,
+                error: 'Cannot create more than 4 active orders simultaneously'
+            });
+        }
+
         const order = await Order.create({
             customer_id,
             courier_id: courier_id || null, // Allow specific assignment
@@ -113,7 +128,7 @@ exports.updateOrderStatus = async (req, res) => {
 
 exports.getNearbyOrders = async (req, res) => {
     try {
-        const { lat, lng, radius = 5000, courier_id } = req.query;
+        const { lat, lng, courier_id } = req.query;
 
         // Return waiting orders that are either:
         // 1. Broadcast (courier_id is null)
@@ -137,11 +152,42 @@ exports.getNearbyOrders = async (req, res) => {
             include: [{ model: Customer, attributes: ['name', 'phone'] }]
         });
 
-        res.json({ success: true, orders });
+        // If lat/lng provided, calculate distance and sort
+        let sortedOrders = orders;
+        if (lat && lng) {
+            sortedOrders = orders.map(order => {
+                const distance = calculateDistance(
+                    parseFloat(lat),
+                    parseFloat(lng),
+                    parseFloat(order.pickup_latitude),
+                    parseFloat(order.pickup_longitude)
+                );
+                return {
+                    ...order.toJSON(),
+                    distance: parseFloat(distance.toFixed(2))
+                };
+            }).sort((a, b) => a.distance - b.distance);
+        }
+
+        res.json({ success: true, orders: sortedOrders });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
     }
 };
+
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return 9999;
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const d = R * c; // Distance in km
+    return d;
+}
 
 exports.getAcceptedOrders = async (req, res) => {
     try {
@@ -152,7 +198,7 @@ exports.getAcceptedOrders = async (req, res) => {
                 status: ['accepted', 'picked_up', 'in_delivery']
             },
             include: [{ model: Customer, attributes: ['name', 'phone'] }],
-            order: [['updated_at', 'DESC']]
+            order: [['updatedAt', 'DESC']]
         });
         res.json({ success: true, orders });
     } catch (error) {
@@ -165,7 +211,7 @@ exports.getCustomerOrders = async (req, res) => {
         const { customer_id } = req.params;
         const orders = await Order.findAll({
             where: { customer_id },
-            order: [['created_at', 'DESC']]
+            order: [['createdAt', 'DESC']]
         });
         res.json({ success: true, orders });
     } catch (error) {
@@ -180,9 +226,29 @@ exports.getAllOrders = async (req, res) => {
                 { model: Customer, attributes: ['name', 'phone'] },
                 { model: Courier, attributes: ['name', 'phone'] }
             ],
-            order: [['created_at', 'DESC']]
+            order: [['createdAt', 'DESC']]
         });
         res.json({ success: true, orders });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+};
+
+exports.getOrderDetails = async (req, res) => {
+    try {
+        const { order_id } = req.params;
+        const order = await Order.findByPk(order_id, {
+            include: [
+                { model: Customer, attributes: ['name', 'phone'] },
+                { model: Courier, attributes: ['name', 'phone', 'latitude', 'longitude'] }
+            ]
+        });
+
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+
+        res.json({ success: true, order });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
     }
