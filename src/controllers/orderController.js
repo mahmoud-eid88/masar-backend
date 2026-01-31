@@ -126,3 +126,16 @@ exports.getNearbyOrders = async (req, res) => {
         res.status(400).json({ success: false, error: error.message });
     }
 };
+
+exports.getCustomerOrders = async (req, res) => {
+    try {
+        const { customer_id } = req.params;
+        const orders = await Order.findAll({
+            where: { customer_id },
+            order: [['created_at', 'DESC']]
+        });
+        res.json({ success: true, orders });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+};

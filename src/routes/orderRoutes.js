@@ -4,13 +4,15 @@ const {
     createOrder,
     acceptOrder,
     updateOrderStatus,
-    getNearbyOrders
+    getNearbyOrders,
+    getCustomerOrders
 } = require('../controllers/orderController');
 
 router.post('/', createOrder);
-router.post('/create', createOrder); // 🩹 FIX: Alias for mobile app which calls /create
+router.post('/create', createOrder); // 🩹 FIX: Alias for mobile app
 router.post('/:order_id/accept', acceptOrder);
 router.patch('/:order_id/status', updateOrderStatus);
 router.get('/nearby', getNearbyOrders);
+router.get('/customer/:customer_id', getCustomerOrders);
 
 module.exports = router;
