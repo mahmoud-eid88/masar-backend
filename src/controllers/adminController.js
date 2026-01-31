@@ -51,7 +51,7 @@ exports.getDashboardStats = async (req, res) => {
         const todayDelivered = await Order.findAll({
             where: {
                 status: 'delivered',
-                updated_at: {
+                updatedAt: {
                     [Op.gte]: today,
                     [Op.lt]: tomorrow
                 }
