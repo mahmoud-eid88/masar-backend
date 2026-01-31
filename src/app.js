@@ -12,6 +12,7 @@ const chatRoutes = require('./routes/chatRoutes');
 const managementRoutes = require('./routes/managementRoutes');
 const walletRoutes = require('./routes/walletRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const profileRoutes = require('./routes/profileRoutes');
 
 const app = express();
 
