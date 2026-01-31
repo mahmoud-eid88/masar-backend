@@ -11,17 +11,32 @@ const generateToken = (id, role) => {
 
 exports.registerCustomer = async (req, res) => {
     try {
-        const { name, email, password, phone } = req.body;
+        const { name, email, password } = req.body;
+        // Phone removed from destructuring, implied optional/null
+
         if (!email || !password) {
-            return res.status(400).json({ success: false, message: 'Email and password are required' });
+            return res.status(400).json({ success: false, message: 'البريد الإلكتروني وكلمة المرور مطلوبين' });
         }
+
+        // Email validation
+        const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ success: false, message: 'الحساب غير حقيقي ولازم يكون حساب التسجل حقيقي في جهة زي جوجل او غيره من الاميلات' });
+        }
+
+        // Check if user exists
+        const existingUser = await Customer.findOne({ where: { email } });
+        if (existingUser) {
+            return res.status(400).json({ success: false, message: 'الحساب موجود بالفعل' });
+        }
+
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const customer = await Customer.create({
             name: name || email.split('@')[0],
             email,
             password: hashedPassword,
-            phone: phone || ''
+            phone: phone || '' // Already handling optional phone
         });
 
         res.status(201).json({
@@ -31,7 +46,7 @@ exports.registerCustomer = async (req, res) => {
         });
     } catch (error) {
         console.error('Registration Error (Customer):', error);
-        res.status(400).json({ success: false, error: error.message });
+        res.status(400).json({ success: false, error: 'حدث خطأ أثناء التسجيل' });
     }
 };
 
@@ -55,7 +70,13 @@ exports.loginCustomer = async (req, res) => {
                 user: { id: customer.id, name: customer.name, email: customer.email }
             });
         } else {
-            res.status(401).json({ success: false, message: 'Invalid credentials' });
+            console.log('Login failed: Invalid credentials');
+            // Determine if email exists to give specific error
+            if (!customer) {
+                res.status(400).json({ success: false, message: 'الحساب غير حقيقي ولازم يكون حساب التسجل حقيقي في جهة زي جوجل او غيره من الاميلات' });
+            } else {
+                res.status(401).json({ success: false, message: 'في مشكله في الباسورد' });
+            }
         }
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
@@ -65,7 +86,9 @@ exports.loginCustomer = async (req, res) => {
 // Same for Courier...
 exports.registerCourier = async (req, res) => {
     try {
-        const { name, email, password, phone } = req.body;
+        const { name, email, password } = req.body;
+        // Phone and name optional logic persists
+
         if (!email || !password) {
             return res.status(400).json({ success: false, message: 'Email and password are required' });
         }
