@@ -41,6 +41,18 @@ const Courier = sequelize.define('Courier', {
     rating: {
         type: DataTypes.FLOAT,
         defaultValue: 5.0
+    },
+    profile_image: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+    identity_image: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+    identity_number: {
+        type: DataTypes.STRING,
+        allowNull: true
     }
 }, {
     tableName: 'couriers',

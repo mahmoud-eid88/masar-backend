@@ -11,6 +11,7 @@ const routeRoutes = require('./routes/routeRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const managementRoutes = require('./routes/managementRoutes');
 const walletRoutes = require('./routes/walletRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
 
@@ -54,6 +55,8 @@ app.use('/api/routes', routeRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/management', managementRoutes);
 app.use('/api/wallet', walletRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/profile', profileRoutes); // Added
 
 app.get('/', (req, res) => {
     res.json({ message: 'Welcome to Masar API' });

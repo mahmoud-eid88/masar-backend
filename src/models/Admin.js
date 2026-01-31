@@ -23,6 +23,9 @@ const Admin = sequelize.define('Admin', {
         type: DataTypes.STRING,
         allowNull: false
     },
+    phone: {
+        type: DataTypes.STRING
+    },
     role: {
         type: DataTypes.STRING,
         defaultValue: 'admin'

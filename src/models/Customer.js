@@ -37,6 +37,22 @@ const Customer = sequelize.define('Customer', {
     rating: {
         type: DataTypes.FLOAT,
         defaultValue: 5.0
+    },
+    profile_image: {
+        type: DataTypes.TEXT, // Use TEXT to support Base64 strings if needed
+        allowNull: true
+    },
+    default_latitude: {
+        type: DataTypes.FLOAT,
+        allowNull: true
+    },
+    default_longitude: {
+        type: DataTypes.FLOAT,
+        allowNull: true
+    },
+    default_address: {
+        type: DataTypes.STRING,
+        allowNull: true
     }
 }, {
     tableName: 'customers',

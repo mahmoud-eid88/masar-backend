@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const { Op } = require('sequelize');
 const { Customer, Courier, Admin } = require('../models');
 
 const generateToken = (id, role) => {
@@ -37,7 +38,15 @@ exports.registerCustomer = async (req, res) => {
 exports.loginCustomer = async (req, res) => {
     try {
         const { email, password } = req.body;
-        const customer = await Customer.findOne({ where: { email } });
+        // Search by email OR phone
+        const customer = await Customer.findOne({
+            where: {
+                [Op.or]: [
+                    { email: email },
+                    { phone: email }
+                ]
+            }
+        });
 
         if (customer && (await bcrypt.compare(password, customer.password))) {
             res.json({
@@ -83,7 +92,15 @@ exports.registerCourier = async (req, res) => {
 exports.loginCourier = async (req, res) => {
     try {
         const { email, password } = req.body;
-        const courier = await Courier.findOne({ where: { email } });
+        // Search by email OR phone
+        const courier = await Courier.findOne({
+            where: {
+                [Op.or]: [
+                    { email: email },
+                    { phone: email }
+                ]
+            }
+        });
 
         if (courier && (await bcrypt.compare(password, courier.password))) {
             res.json({
@@ -128,7 +145,14 @@ exports.registerAdmin = async (req, res) => {
 exports.loginAdmin = async (req, res) => {
     try {
         const { email, password } = req.body;
-        const admin = await Admin.findOne({ where: { email } });
+        const admin = await Admin.findOne({
+            where: {
+                [Op.or]: [
+                    { email: email },
+                    { phone: email }
+                ]
+            }
+        });
 
         if (admin && (await bcrypt.compare(password, admin.password))) {
             res.json({
@@ -156,4 +180,58 @@ exports.login = async (req, res) => {
     if (role === 'courier') return exports.loginCourier(req, res);
     if (role === 'admin') return exports.loginAdmin(req, res);
     return exports.loginCustomer(req, res);
+};
+
+exports.switchRole = async (req, res) => {
+    try {
+        const { current_role, target_role, user_id } = req.body;
+        let currentUser;
+
+        if (current_role === 'customer') {
+            currentUser = await Customer.findByPk(user_id);
+        } else if (current_role === 'courier') {
+            currentUser = await Courier.findByPk(user_id);
+        }
+
+        if (!currentUser) return res.status(404).json({ success: false, message: 'User not found' });
+
+        let targetUser;
+        if (target_role === 'customer') {
+            targetUser = await Customer.findOne({ where: { email: currentUser.email } });
+            if (!targetUser) {
+                // Auto-create customer profile
+                targetUser = await Customer.create({
+                    name: currentUser.name,
+                    email: currentUser.email,
+                    password: currentUser.password,
+                    phone: currentUser.phone
+                });
+            }
+        } else if (target_role === 'courier') {
+            targetUser = await Courier.findOne({ where: { email: currentUser.email } });
+            if (!targetUser) {
+                // Auto-create courier profile
+                targetUser = await Courier.create({
+                    name: currentUser.name,
+                    email: currentUser.email,
+                    password: currentUser.password,
+                    phone: currentUser.phone,
+                    availability: true
+                });
+            }
+        }
+
+        res.json({
+            success: true,
+            token: generateToken(targetUser.id, target_role),
+            user: {
+                id: targetUser.id,
+                name: targetUser.name,
+                email: targetUser.email,
+                role: target_role
+            }
+        });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
 };

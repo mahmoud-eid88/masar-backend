@@ -11,6 +11,7 @@ const {
 
 router.post('/register', register);
 router.post('/login', login);
+router.post('/switch-role', require('../controllers/authController').switchRole);
 router.post('/customer/register', registerCustomer);
 router.post('/customer/login', loginCustomer);
 router.post('/courier/register', registerCourier);
