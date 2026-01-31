@@ -24,6 +24,16 @@ exports.getProfile = async (req, res) => {
             profile = await Courier.findByPk(id, {
                 attributes: ['id', 'name', 'email', 'phone', 'rating', 'availability']
             });
+        } else if (role === 'admin') {
+            const Admin = require('../models/Admin');
+            profile = await Admin.findByPk(id, {
+                attributes: ['id', 'name', 'email']
+            });
+            if (profile) {
+                profile.setDataValue('role', 'admin');
+                profile.setDataValue('rating', 5.0); // Placeholder
+                profile.setDataValue('phone', 'Support'); // Placeholder
+            }
         } else {
             const { Customer } = require('../models');
             profile = await Customer.findByPk(id, {
