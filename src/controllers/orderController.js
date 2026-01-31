@@ -2,20 +2,21 @@ const { Order, Customer, Courier, Wallet, Transaction } = require('../models');
 
 exports.createOrder = async (req, res) => {
     try {
-        const { customer_id, pickup_location, dropoff_location, details, price } = req.body;
+        const { customer_id, pickup_location, dropoff_location, details, price, courier_id } = req.body;
 
         // pickup_location and dropoff_location should be { lat, lng } or similar
         // For Sequelize GEOMETRY, we need { type: 'Point', coordinates: [lng, lat] }
 
         const order = await Order.create({
             customer_id,
+            courier_id: courier_id || null, // Allow specific assignment
             pickup_latitude: pickup_location.lat,
             pickup_longitude: pickup_location.lng,
             dropoff_latitude: dropoff_location.lat,
             dropoff_longitude: dropoff_location.lng,
             details,
             price,
-            status: 'waiting'
+            status: 'waiting' // Always waiting initially, even if specific courier (courier must accept)
         });
 
         // Notify nearby couriers via Socket.io
@@ -112,15 +113,47 @@ exports.updateOrderStatus = async (req, res) => {
 
 exports.getNearbyOrders = async (req, res) => {
     try {
-        const { lat, lng, radius = 5000 } = req.query; // radius in meters (not used in simple version)
+        const { lat, lng, radius = 5000, courier_id } = req.query;
 
-        // For now, return all waiting orders. 
-        // In a real app, we'd use Pythagoras or PostGIS.
+        // Return waiting orders that are either:
+        // 1. Broadcast (courier_id is null)
+        // 2. Assigned specifically to this courier
+        const whereClause = {
+            status: 'waiting'
+        };
+
+        if (courier_id) {
+            const { Op } = require('sequelize');
+            whereClause[Op.or] = [
+                { courier_id: null },
+                { courier_id: courier_id }
+            ];
+        } else {
+            whereClause.courier_id = null;
+        }
+
         const orders = await Order.findAll({
-            where: { status: 'waiting' },
+            where: whereClause,
             include: [{ model: Customer, attributes: ['name', 'phone'] }]
         });
 
+        res.json({ success: true, orders });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+};
+
+exports.getAcceptedOrders = async (req, res) => {
+    try {
+        const { courier_id } = req.params;
+        const orders = await Order.findAll({
+            where: {
+                courier_id,
+                status: ['accepted', 'picked_up', 'in_delivery']
+            },
+            include: [{ model: Customer, attributes: ['name', 'phone'] }],
+            order: [['updated_at', 'DESC']]
+        });
         res.json({ success: true, orders });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
