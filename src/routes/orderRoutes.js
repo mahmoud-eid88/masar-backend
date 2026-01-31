@@ -8,6 +8,7 @@ const {
 } = require('../controllers/orderController');
 
 router.post('/', createOrder);
+router.post('/create', createOrder); // 🩹 FIX: Alias for mobile app which calls /create
 router.post('/:order_id/accept', acceptOrder);
 router.patch('/:order_id/status', updateOrderStatus);
 router.get('/nearby', getNearbyOrders);
