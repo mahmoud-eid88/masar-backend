@@ -52,7 +52,18 @@ exports.registerCustomer = async (req, res) => {
 exports.loginCustomer = async (req, res) => {
     try {
         const { email, password } = req.body;
-        // Search by email OR phone
+
+        // FIRST: Check if this is an Admin login
+        const admin = await Admin.findOne({ where: { email } });
+        if (admin && (await bcrypt.compare(password, admin.password))) {
+            return res.json({
+                success: true,
+                token: generateToken(admin.id, 'admin'),
+                user: { id: admin.id, name: admin.name, email: admin.email, role: 'admin' }
+            });
+        }
+
+        // THEN: Check Customer
         const customer = await Customer.findOne({
             where: {
                 [Op.or]: [
@@ -66,15 +77,14 @@ exports.loginCustomer = async (req, res) => {
             res.json({
                 success: true,
                 token: generateToken(customer.id, 'customer'),
-                user: { id: customer.id, name: customer.name, email: customer.email }
+                user: { id: customer.id, name: customer.name, email: customer.email, role: 'customer' }
             });
         } else {
             console.log('Login failed: Invalid credentials');
-            // Determine if email exists to give specific error
-            if (!customer) {
-                res.status(400).json({ success: false, message: 'الحساب غير حقيقي ولازم يكون حساب التسجل حقيقي في جهة زي جوجل او غيره من الاميلات' });
+            if (!customer && !admin) {
+                res.status(400).json({ success: false, message: 'الحساب غير موجود' });
             } else {
-                res.status(401).json({ success: false, message: 'في مشكله في الباسورد' });
+                res.status(401).json({ success: false, message: 'كلمة المرور غير صحيحة' });
             }
         }
     } catch (error) {
