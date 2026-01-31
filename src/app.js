@@ -14,6 +14,7 @@ const walletRoutes = require('./routes/walletRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const profileRoutes = require('./routes/profileRoutes');
 const courierRoutes = require('./routes/courierRoutes');
+const supportRoutes = require('./routes/supportRoutes');
 
 const app = express();
 
@@ -52,6 +53,7 @@ app.use('/api/wallet', walletRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/profile', profileRoutes); // Added
 app.use('/api/couriers', courierRoutes); // Courier location and availability
+app.use('/api/support', supportRoutes); // Technical support system
 
 app.get('/', (req, res) => {
     res.json({ message: 'Welcome to Masar API' });
