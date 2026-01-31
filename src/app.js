@@ -73,6 +73,9 @@ app.get('/api/db-check', async (req, res) => {
             user_count: userCount,
             env_sync_db: process.env.SYNC_DB,
             node_env: process.env.NODE_ENV,
+            db_url_exists: !!process.env.DATABASE_URL,
+            db_host_exists: !!process.env.DB_HOST,
+            db_host_value: process.env.DB_HOST, // Safe to show host
             tables: tables
         });
     } catch (error) {
@@ -80,7 +83,14 @@ app.get('/api/db-check', async (req, res) => {
             status: 'error',
             message: 'Database connection failed',
             error: error.message,
-            stack: error.stack
+            stack: error.stack,
+            diagnostics: {
+                node_env: process.env.NODE_ENV,
+                has_database_url: !!process.env.DATABASE_URL,
+                has_db_host: !!process.env.DB_HOST,
+                db_host: process.env.DB_HOST,
+                db_user: process.env.DB_USER
+            }
         });
     }
 });
