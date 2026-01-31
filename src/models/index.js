@@ -5,6 +5,7 @@ const Order = require('./Order');
 const Message = require('./Message');
 const Wallet = require('./Wallet');
 const Admin = require('./Admin');
+const Transaction = require('./Transaction');
 
 const db = {
     sequelize,
