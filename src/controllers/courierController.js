@@ -107,3 +107,56 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 function toRad(deg) {
     return deg * (Math.PI / 180);
 }
+
+// Toggle courier availability (for management routes compatibility)
+exports.toggleAvailability = async (req, res) => {
+    try {
+        const { courier_id } = req.params;
+
+        const courier = await Courier.findByPk(courier_id);
+        if (!courier) {
+            return res.status(404).json({ success: false, message: 'المندوب غير موجود' });
+        }
+
+        const newAvailability = !courier.availability;
+        await courier.update({ availability: newAvailability });
+
+        res.json({
+            success: true,
+            message: newAvailability ? 'أنت متصل الآن' : 'أنت غير متصل',
+            availability: newAvailability
+        });
+    } catch (error) {
+        console.error('Toggle Availability Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// Get profile (for management routes compatibility)
+exports.getProfile = async (req, res) => {
+    try {
+        const { role, id } = req.params;
+        const { Customer } = require('../models');
+
+        let user;
+        if (role === 'courier') {
+            user = await Courier.findByPk(id, {
+                attributes: { exclude: ['password'] }
+            });
+        } else if (role === 'customer') {
+            user = await Customer.findByPk(id, {
+                attributes: { exclude: ['password'] }
+            });
+        }
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+        }
+
+        res.json({ success: true, user });
+    } catch (error) {
+        console.error('Get Profile Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
