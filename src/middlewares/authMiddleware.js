@@ -8,8 +8,15 @@ const authenticateToken = (req, res, next) => {
         return res.status(401).json({ success: false, message: 'Access token required' });
     }
 
-    jwt.verify(token, process.env.JWT_SECRET || 'masar_secret_key_2024', (err, user) => {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+        console.error('JWT_SECRET not defined in environment!');
+        return res.status(500).json({ success: false, message: 'Server configuration error' });
+    }
+
+    jwt.verify(token, secret, (err, user) => {
         if (err) {
+            console.error('Token verification failed:', err.message);
             return res.status(403).json({ success: false, message: 'Invalid or expired token' });
         }
         req.user = user;
@@ -18,3 +25,4 @@ const authenticateToken = (req, res, next) => {
 };
 
 module.exports = { authenticateToken };
+
