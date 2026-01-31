@@ -24,18 +24,10 @@ const app = express();
         await sequelize.authenticate();
         console.log('✅ Database connection established successfully.');
 
-        // Sync database tables if SYNC_DB is enabled
-        if (process.env.SYNC_DB === 'true') {
-            console.log('Syncing database tables...');
-            await sequelize.sync({ alter: true });
-            console.log('✅ Database tables synced successfully.');
-        } else if (process.env.NODE_ENV === 'development') {
-            console.log('Development mode: Syncing database tables...');
-            await sequelize.sync({ alter: true });
-            console.log('✅ Database tables synced successfully.');
-        } else {
-            console.log('ℹ️  Database sync skipped. Set SYNC_DB=true to enable.');
-        }
+        // ALWAYS sync database tables on startup
+        console.log('Syncing database tables...');
+        await sequelize.sync({ alter: true });
+        console.log('✅ Database tables synced successfully.');
     } catch (err) {
         console.error('❌ Database error:', err.message);
         console.error('Full error:', err);
