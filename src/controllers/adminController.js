@@ -1,4 +1,4 @@
-const { Order, Courier, Customer } = require('../models');
+const { Order, Courier, Customer, Admin } = require('../models');
 const { Op } = require('sequelize');
 
 exports.getDashboardStats = async (req, res) => {
@@ -72,6 +72,7 @@ exports.getDashboardStats = async (req, res) => {
                 pendingOrders,
                 activeOrders,
                 deliveredOrders,
+                totalStaff: await Admin.count(),
                 totalRevenue: totalRevenue.toFixed(2),
                 todayRevenue: todayRevenue.toFixed(2)
             }
@@ -124,6 +125,24 @@ exports.getAllUsers = async (req, res) => {
                 order: [['createdAt', 'DESC']]
             });
             users = users.concat(couriers.map(c => ({ ...c.toJSON(), role: 'courier' })));
+        }
+
+        if (!type || type === 'all' || type === 'staff') {
+            let adminWhere = {};
+            if (search) {
+                adminWhere = {
+                    [Op.or]: [
+                        { name: { [Op.iLike]: `%${search}%` } },
+                        { email: { [Op.iLike]: `%${search}%` } }
+                    ]
+                };
+            }
+            const staff = await Admin.findAll({
+                where: adminWhere,
+                attributes: { exclude: ['password'] },
+                order: [['createdAt', 'DESC']]
+            });
+            users = users.concat(staff.map(s => ({ ...s.toJSON() })));
         }
 
         res.json({
@@ -226,6 +245,17 @@ exports.updateUserRole = async (req, res) => {
                     password: currentUser.password,
                     phone: currentUser.phone,
                     availability: true
+                });
+            }
+        } else if (targetRole === 'support') {
+            targetUser = await Admin.findOne({ where: { email: currentUser.email } });
+            if (!targetUser) {
+                targetUser = await Admin.create({
+                    name: currentUser.name,
+                    email: currentUser.email,
+                    password: currentUser.password,
+                    phone: currentUser.phone,
+                    role: 'support'
                 });
             }
         }
