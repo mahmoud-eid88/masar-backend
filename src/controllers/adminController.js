@@ -12,7 +12,7 @@ exports.getDashboardStats = async (req, res) => {
         const totalOrders = await Order.count();
         const todayOrders = await Order.count({
             where: {
-                created_at: {
+                createdAt: {
                     [Op.gte]: today,
                     [Op.lt]: tomorrow
                 }
@@ -102,7 +102,7 @@ exports.getAllUsers = async (req, res) => {
             const customers = await Customer.findAll({
                 where: customerWhere,
                 attributes: { exclude: ['password'] },
-                order: [['created_at', 'DESC']]
+                order: [['createdAt', 'DESC']]
             });
             users = users.concat(customers.map(c => ({ ...c.toJSON(), role: 'customer' })));
         }
@@ -121,7 +121,7 @@ exports.getAllUsers = async (req, res) => {
             const couriers = await Courier.findAll({
                 where: courierWhere,
                 attributes: { exclude: ['password'] },
-                order: [['created_at', 'DESC']]
+                order: [['createdAt', 'DESC']]
             });
             users = users.concat(couriers.map(c => ({ ...c.toJSON(), role: 'courier' })));
         }
@@ -140,7 +140,7 @@ exports.getAllCouriers = async (req, res) => {
     try {
         const couriers = await Courier.findAll({
             attributes: { exclude: ['password'] },
-            order: [['created_at', 'DESC']]
+            order: [['createdAt', 'DESC']]
         });
 
         // Get order counts for each courier
@@ -176,7 +176,7 @@ exports.getRecentOrders = async (req, res) => {
                 { model: Customer, attributes: ['id', 'name', 'phone'] },
                 { model: Courier, attributes: ['id', 'name', 'phone'] }
             ],
-            order: [['created_at', 'DESC']],
+            order: [['createdAt', 'DESC']],
             limit: parseInt(limit)
         });
 
