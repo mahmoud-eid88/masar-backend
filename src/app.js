@@ -1,7 +1,9 @@
+const dotenv = require('dotenv');
+dotenv.config();
+
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
-const dotenv = require('dotenv');
 const { sequelize } = require('./models');
 const authRoutes = require('./routes/authRoutes');
 const orderRoutes = require('./routes/orderRoutes');
@@ -9,8 +11,6 @@ const routeRoutes = require('./routes/routeRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const managementRoutes = require('./routes/managementRoutes');
 const walletRoutes = require('./routes/walletRoutes');
-
-dotenv.config();
 
 const app = express();
 
