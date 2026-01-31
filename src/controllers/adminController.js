@@ -218,6 +218,8 @@ exports.updateUserRole = async (req, res) => {
             currentUser = await Customer.findByPk(userId);
         } else if (currentRole === 'courier') {
             currentUser = await Courier.findByPk(userId);
+        } else if (currentRole === 'admin' || currentRole === 'support') {
+            currentUser = await Admin.findByPk(userId);
         }
 
         if (!currentUser) {
@@ -257,6 +259,19 @@ exports.updateUserRole = async (req, res) => {
                     phone: currentUser.phone,
                     role: 'support'
                 });
+            }
+        } else if (targetRole === 'admin') {
+            targetUser = await Admin.findOne({ where: { email: currentUser.email } });
+            if (!targetUser) {
+                targetUser = await Admin.create({
+                    name: currentUser.name,
+                    email: currentUser.email,
+                    password: currentUser.password,
+                    phone: currentUser.phone,
+                    role: 'admin'
+                });
+            } else {
+                await targetUser.update({ role: 'admin' });
             }
         }
 
