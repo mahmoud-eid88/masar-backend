@@ -11,8 +11,7 @@ const generateToken = (id, role) => {
 
 exports.registerCustomer = async (req, res) => {
     try {
-        const { name, email, password } = req.body;
-        // Phone removed from destructuring, implied optional/null
+        const { name, email, password, phone } = req.body;
 
         if (!email || !password) {
             return res.status(400).json({ success: false, message: 'البريد الإلكتروني وكلمة المرور مطلوبين' });
@@ -21,7 +20,7 @@ exports.registerCustomer = async (req, res) => {
         // Email validation
         const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
         if (!emailRegex.test(email)) {
-            return res.status(400).json({ success: false, message: 'الحساب غير حقيقي ولازم يكون حساب التسجل حقيقي في جهة زي جوجل او غيره من الاميلات' });
+            return res.status(400).json({ success: false, message: 'صيغة البريد الإلكتروني غير صحيحة' });
         }
 
         // Check if user exists
@@ -36,7 +35,7 @@ exports.registerCustomer = async (req, res) => {
             name: name || email.split('@')[0],
             email,
             password: hashedPassword,
-            phone: phone || '' // Already handling optional phone
+            phone: phone || null
         });
 
         res.status(201).json({
