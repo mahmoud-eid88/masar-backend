@@ -139,3 +139,18 @@ exports.getCustomerOrders = async (req, res) => {
         res.status(400).json({ success: false, error: error.message });
     }
 };
+
+exports.getAllOrders = async (req, res) => {
+    try {
+        const orders = await Order.findAll({
+            include: [
+                { model: Customer, attributes: ['name', 'phone'] },
+                { model: Courier, attributes: ['name', 'phone'] }
+            ],
+            order: [['created_at', 'DESC']]
+        });
+        res.json({ success: true, orders });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+};

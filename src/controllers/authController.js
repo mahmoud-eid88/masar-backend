@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { Customer, Courier } = require('../models');
+const { Customer, Courier, Admin } = require('../models');
 
 const generateToken = (id, role) => {
     return jwt.sign({ id, role }, process.env.JWT_SECRET, {
@@ -99,18 +99,61 @@ exports.loginCourier = async (req, res) => {
     }
 };
 
+// Admin Auth
+exports.registerAdmin = async (req, res) => {
+    try {
+        const { name, email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ success: false, message: 'Email and password are required' });
+        }
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const admin = await Admin.create({
+            name: name || 'Admin',
+            email,
+            password: hashedPassword
+        });
+
+        res.status(201).json({
+            success: true,
+            token: generateToken(admin.id, 'admin'),
+            user: { id: admin.id, name: admin.name, email: admin.email, role: 'admin' }
+        });
+    } catch (error) {
+        console.error('Registration Error (Admin):', error);
+        res.status(400).json({ success: false, error: error.message });
+    }
+};
+
+exports.loginAdmin = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const admin = await Admin.findOne({ where: { email } });
+
+        if (admin && (await bcrypt.compare(password, admin.password))) {
+            res.json({
+                success: true,
+                token: generateToken(admin.id, 'admin'),
+                user: { id: admin.id, name: admin.name, email: admin.email, role: 'admin' }
+            });
+        } else {
+            res.status(401).json({ success: false, message: 'Invalid credentials' });
+        }
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+};
+
 exports.register = async (req, res) => {
     const { role } = req.body;
-    if (role === 'courier') {
-        return exports.registerCourier(req, res);
-    }
+    if (role === 'courier') return exports.registerCourier(req, res);
+    if (role === 'admin') return exports.registerAdmin(req, res);
     return exports.registerCustomer(req, res);
 };
 
 exports.login = async (req, res) => {
     const { role } = req.body;
-    if (role === 'courier') {
-        return exports.loginCourier(req, res);
-    }
+    if (role === 'courier') return exports.loginCourier(req, res);
+    if (role === 'admin') return exports.loginAdmin(req, res);
     return exports.loginCustomer(req, res);
 };

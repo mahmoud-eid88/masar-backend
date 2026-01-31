@@ -5,7 +5,8 @@ const {
     acceptOrder,
     updateOrderStatus,
     getNearbyOrders,
-    getCustomerOrders
+    getCustomerOrders,
+    getAllOrders
 } = require('../controllers/orderController');
 
 router.post('/', createOrder);
@@ -14,5 +15,6 @@ router.post('/:order_id/accept', acceptOrder);
 router.patch('/:order_id/status', updateOrderStatus);
 router.get('/nearby', getNearbyOrders);
 router.get('/customer/:customer_id', getCustomerOrders);
+router.get('/admin/all', getAllOrders);
 
 module.exports = router;

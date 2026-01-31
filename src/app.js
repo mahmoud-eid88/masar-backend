@@ -112,6 +112,25 @@ app.get('/api/force-db-sync', async (req, res) => {
     }
 });
 
+// Seed Initial Admin Route
+const { registerAdmin } = require('./controllers/authController');
+app.get('/api/create-initial-admin', async (req, res) => {
+    try {
+        // Mock request object
+        const mockReq = {
+            body: {
+                name: 'System Admin',
+                email: 'admin@masar.com',
+                password: 'admin123'
+            }
+        };
+        // Reuse registerAdmin logic
+        await registerAdmin(mockReq, res);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Error handling
 app.use((err, req, res, next) => {
     console.error(err.stack);

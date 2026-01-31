@@ -4,12 +4,13 @@ const Courier = require('./Courier');
 const Order = require('./Order');
 const Message = require('./Message');
 const Wallet = require('./Wallet');
-const Transaction = require('./Transaction');
+const Admin = require('./Admin');
 
 const db = {
     sequelize,
     Customer,
     Courier,
+    Admin, // New Admin Model
     Order,
     Message,
     Wallet,
