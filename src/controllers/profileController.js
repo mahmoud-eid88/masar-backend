@@ -6,7 +6,7 @@ exports.updateProfile = async (req, res) => {
     try {
         const userId = req.user.id;
         const role = req.user.role;
-        const { name, phone, default_latitude, default_longitude, default_address, identity_number } = req.body;
+        const { name, phone, email, bio, default_latitude, default_longitude, default_address, identity_number } = req.body;
 
         // Handle Images (Base64 conversion)
         let profile_image_base64 = null;
@@ -35,6 +35,8 @@ exports.updateProfile = async (req, res) => {
         // Update Fields
         if (name) user.name = name;
         if (phone) user.phone = phone;
+        if (email) user.email = email;
+        if (bio !== undefined) user.bio = bio;
         if (profile_image_base64) user.profile_image = profile_image_base64;
 
         if (role === 'customer') {
@@ -56,6 +58,7 @@ exports.updateProfile = async (req, res) => {
                 name: user.name,
                 email: user.email,
                 phone: user.phone,
+                bio: user.bio,
                 profile_image: user.profile_image,
                 // Include role-specific fields
                 ...(role === 'customer' && {

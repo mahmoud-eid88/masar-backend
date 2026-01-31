@@ -53,6 +53,10 @@ const Courier = sequelize.define('Courier', {
     identity_number: {
         type: DataTypes.STRING,
         allowNull: true
+    },
+    bio: {
+        type: DataTypes.TEXT,
+        allowNull: true
     }
 }, {
     tableName: 'couriers',

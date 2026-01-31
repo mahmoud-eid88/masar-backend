@@ -53,6 +53,10 @@ const Customer = sequelize.define('Customer', {
     default_address: {
         type: DataTypes.STRING,
         allowNull: true
+    },
+    bio: {
+        type: DataTypes.TEXT,
+        allowNull: true
     }
 }, {
     tableName: 'customers',
