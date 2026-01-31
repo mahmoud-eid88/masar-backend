@@ -95,6 +95,23 @@ app.get('/api/db-check', async (req, res) => {
     }
 });
 
+// Force Database Sync Route
+app.get('/api/force-db-sync', async (req, res) => {
+    try {
+        await sequelize.sync({ alter: true });
+        res.json({
+            status: 'success',
+            message: 'Database tables synced successfully'
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to sync database',
+            error: error.message
+        });
+    }
+});
+
 // Error handling
 app.use((err, req, res, next) => {
     console.error(err.stack);
