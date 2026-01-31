@@ -14,14 +14,33 @@ dotenv.config();
 
 const app = express();
 
-// Sync Database in development
-if (process.env.NODE_ENV === 'development') {
-    sequelize.sync({ alter: true }).then(() => {
-        console.log('Database synced');
-    }).catch(err => {
-        console.error('Failed to sync database:', err);
-    });
-}
+// Database Connection and Sync
+(async () => {
+    try {
+        // Test database connection
+        console.log('Testing database connection...');
+        await sequelize.authenticate();
+        console.log('✅ Database connection established successfully.');
+
+        // Sync database tables if SYNC_DB is enabled
+        if (process.env.SYNC_DB === 'true') {
+            console.log('Syncing database tables...');
+            await sequelize.sync({ alter: true });
+            console.log('✅ Database tables synced successfully.');
+        } else if (process.env.NODE_ENV === 'development') {
+            console.log('Development mode: Syncing database tables...');
+            await sequelize.sync({ alter: true });
+            console.log('✅ Database tables synced successfully.');
+        } else {
+            console.log('ℹ️  Database sync skipped. Set SYNC_DB=true to enable.');
+        }
+    } catch (err) {
+        console.error('❌ Database error:', err.message);
+        console.error('Full error:', err);
+        // Don't exit - let the server start so we can see errors
+        console.warn('⚠️  Server will start but database operations may fail');
+    }
+})();
 
 // Middlewares
 app.use(cors());

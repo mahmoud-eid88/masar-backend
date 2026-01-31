@@ -11,13 +11,16 @@ const generateToken = (id, role) => {
 exports.registerCustomer = async (req, res) => {
     try {
         const { name, email, password, phone } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ success: false, message: 'Email and password are required' });
+        }
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const customer = await Customer.create({
             name: name || email.split('@')[0],
             email,
             password: hashedPassword,
-            phone
+            phone: phone || ''
         });
 
         res.status(201).json({
@@ -26,6 +29,7 @@ exports.registerCustomer = async (req, res) => {
             user: { id: customer.id, name: customer.name, email: customer.email }
         });
     } catch (error) {
+        console.error('Registration Error (Customer):', error);
         res.status(400).json({ success: false, error: error.message });
     }
 };
@@ -53,13 +57,16 @@ exports.loginCustomer = async (req, res) => {
 exports.registerCourier = async (req, res) => {
     try {
         const { name, email, password, phone } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ success: false, message: 'Email and password are required' });
+        }
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const courier = await Courier.create({
             name: name || email.split('@')[0],
             email,
             password: hashedPassword,
-            phone
+            phone: phone || ''
         });
 
         res.status(201).json({
@@ -68,6 +75,7 @@ exports.registerCourier = async (req, res) => {
             user: { id: courier.id, name: courier.name, email: courier.email }
         });
     } catch (error) {
+        console.error('Registration Error (Courier):', error);
         res.status(400).json({ success: false, error: error.message });
     }
 };
