@@ -59,6 +59,32 @@ app.get('/', (req, res) => {
     res.json({ message: 'Welcome to Masar API' });
 });
 
+// Debug Route: Check Database Status
+app.get('/api/db-check', async (req, res) => {
+    try {
+        await sequelize.authenticate();
+        const tables = await sequelize.getQueryInterface().showAllSchemas();
+        // Check if User table exists
+        const userCount = await sequelize.models.User ? await sequelize.models.User.count() : 'User model not loaded';
+
+        res.json({
+            status: 'success',
+            message: 'Database connection established',
+            user_count: userCount,
+            env_sync_db: process.env.SYNC_DB,
+            node_env: process.env.NODE_ENV,
+            tables: tables
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: 'Database connection failed',
+            error: error.message,
+            stack: error.stack
+        });
+    }
+});
+
 // Error handling
 app.use((err, req, res, next) => {
     console.error(err.stack);
