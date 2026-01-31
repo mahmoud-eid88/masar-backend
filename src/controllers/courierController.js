@@ -1,106 +1,109 @@
 const { Courier } = require('../models');
 
-exports.toggleAvailability = async (req, res) => {
+// Update courier location
+exports.updateLocation = async (req, res) => {
     try {
-        const { courier_id } = req.params;
-        const courier = await Courier.findByPk(courier_id);
-        if (!courier) return res.status(404).json({ success: false, message: 'Courier not found' });
+        const { courierId } = req.params;
+        const { latitude, longitude } = req.body;
 
-        courier.availability = !courier.availability;
-        await courier.save();
+        const courier = await Courier.findByPk(courierId);
+        if (!courier) {
+            return res.status(404).json({ success: false, message: 'المندوب غير موجود' });
+        }
 
-        res.json({ success: true, availability: courier.availability });
+        await courier.update({ latitude, longitude });
+
+        res.json({
+            success: true,
+            message: 'تم تحديث الموقع',
+            location: { latitude, longitude }
+        });
     } catch (error) {
-        res.status(400).json({ success: false, error: error.message });
+        console.error('Update Location Error:', error);
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
-exports.getProfile = async (req, res) => {
+// Update courier availability (online/offline)
+exports.updateAvailability = async (req, res) => {
     try {
-        const { id, role } = req.params;
-        let profile;
+        const { courierId } = req.params;
+        const { availability } = req.body;
 
-        if (role === 'courier') {
-            profile = await Courier.findByPk(id, {
-                attributes: ['id', 'name', 'email', 'phone', 'rating', 'availability']
-            });
-        } else if (role === 'admin') {
-            const Admin = require('../models/Admin');
-            profile = await Admin.findByPk(id, {
-                attributes: ['id', 'name', 'email']
-            });
-            if (profile) {
-                profile.setDataValue('role', 'admin');
-                profile.setDataValue('rating', 5.0); // Placeholder
-                profile.setDataValue('phone', 'Support'); // Placeholder
-            }
-        } else {
-            const { Customer } = require('../models');
-            profile = await Customer.findByPk(id, {
-                attributes: ['id', 'name', 'email', 'phone', 'rating']
-            });
+        const courier = await Courier.findByPk(courierId);
+        if (!courier) {
+            return res.status(404).json({ success: false, message: 'المندوب غير موجود' });
         }
 
-        if (!profile) {
-            console.warn(`Profile not found for ID: ${id}, Role: ${role}`);
-            return res.status(404).json({ success: false, message: 'Profile not found' });
-        }
+        await courier.update({ availability });
 
-        res.json({ success: true, profile });
+        res.json({
+            success: true,
+            message: availability ? 'أنت متصل الآن' : 'أنت غير متصل',
+            availability
+        });
     } catch (error) {
-        console.error('Get Profile Error:', error);
-        res.status(400).json({ success: false, error: error.message });
+        console.error('Update Availability Error:', error);
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
+// Get nearby couriers with distance
 exports.getNearbyCouriers = async (req, res) => {
     try {
-        const { lat, lng } = req.body;
+        const { lat, lng } = req.query;
+
         if (!lat || !lng) {
-            return res.status(400).json({ success: false, message: 'Location (lat, lng) is required' });
+            return res.status(400).json({ success: false, message: 'يرجى تقديم الموقع' });
         }
 
-        // Fetch available couriers
+        const customerLat = parseFloat(lat);
+        const customerLng = parseFloat(lng);
+
+        // Get all available couriers
         const couriers = await Courier.findAll({
             where: { availability: true },
-            attributes: ['id', 'name', 'rating', 'latitude', 'longitude']
+            attributes: ['id', 'name', 'latitude', 'longitude', 'rating', 'phone']
         });
 
-        // Calculate distance and sort
-        const nearbyCouriers = couriers.map(courier => {
-            const distance = calculateDistance(lat, lng, courier.latitude, courier.longitude);
+        // Calculate distance for each courier (Haversine formula)
+        const couriersWithDistance = couriers
+            .filter(c => c.latitude && c.longitude)
+            .map(courier => {
+                const distance = calculateDistance(
+                    customerLat, customerLng,
+                    courier.latitude, courier.longitude
+                );
+                return {
+                    ...courier.toJSON(),
+                    distance: Math.round(distance * 10) / 10 // Round to 1 decimal
+                };
+            })
+            .sort((a, b) => a.distance - b.distance);
 
-            return {
-                id: courier.id,
-                name: courier.name,
-                rating: courier.rating || 5.0,
-                tripCount: 0, // Placeholder
-                distance: distance.toFixed(1),
-                type: 'courier' // for frontend selection logic
-            };
-        }).sort((a, b) => a.distance - b.distance).slice(0, 5); // Return top 5
-
-        res.json({ success: true, couriers: nearbyCouriers });
+        res.json({
+            success: true,
+            couriers: couriersWithDistance
+        });
     } catch (error) {
         console.error('Get Nearby Couriers Error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 };
 
+// Haversine formula to calculate distance between two points
 function calculateDistance(lat1, lon1, lat2, lon2) {
-    if (!lat1 || !lon1 || !lat2 || !lon2) return 9999;
-    const R = 6371; // Radius of the earth in km
-    const dLat = deg2rad(lat2 - lat1);
-    const dLon = deg2rad(lon2 - lon1);
+    const R = 6371; // Earth's radius in km
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
     const a =
         Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
         Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const d = R * c; // Distance in km
-    return d;
+    return R * c; // Distance in km
 }
 
-function deg2rad(deg) {
+function toRad(deg) {
     return deg * (Math.PI / 180);
 }
