@@ -1,5 +1,6 @@
 const Customer = require('../models/Customer');
 const Courier = require('../models/Courier');
+const Admin = require('../models/Admin');
 const SecurityLog = require('../models/SecurityLog');
 const bcrypt = require('bcryptjs');
 
@@ -121,6 +122,8 @@ exports.changePassword = async (req, res) => {
             user = await Customer.findByPk(userId);
         } else if (role === 'courier') {
             user = await Courier.findByPk(userId);
+        } else if (role === 'admin' || role === 'support') {
+            user = await Admin.findByPk(userId);
         }
 
         if (!user) {
