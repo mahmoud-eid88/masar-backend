@@ -74,6 +74,9 @@ exports.loginCustomer = async (req, res) => {
         });
 
         if (customer && (await bcrypt.compare(password, customer.password))) {
+            if (customer.is_blocked) {
+                return res.status(403).json({ success: false, message: 'تم حظرك بسبب مخالفة سياسة التطبيق' });
+            }
             res.json({
                 success: true,
                 token: generateToken(customer.id, 'customer'),
@@ -95,7 +98,7 @@ exports.loginCustomer = async (req, res) => {
 // Same for Courier...
 exports.registerCourier = async (req, res) => {
     try {
-        const { name, email, password } = req.body;
+        const { name, email, password, phone } = req.body;
         // Phone and name optional logic persists
 
         if (!email || !password) {
@@ -135,6 +138,9 @@ exports.loginCourier = async (req, res) => {
         });
 
         if (courier && (await bcrypt.compare(password, courier.password))) {
+            if (courier.is_blocked) {
+                return res.status(403).json({ success: false, message: 'تم حظرك بسبب مخالفة سياسة التطبيق' });
+            }
             res.json({
                 success: true,
                 token: generateToken(courier.id, 'courier'),
@@ -236,7 +242,7 @@ exports.switchRole = async (req, res) => {
                     name: currentUser.name,
                     email: currentUser.email,
                     password: currentUser.password,
-                    phone: currentUser.phone
+                    phone: currentUser.phone || ''
                 });
             }
         } else if (target_role === 'courier') {
@@ -247,10 +253,14 @@ exports.switchRole = async (req, res) => {
                     name: currentUser.name,
                     email: currentUser.email,
                     password: currentUser.password,
-                    phone: currentUser.phone,
+                    phone: currentUser.phone || '',
                     availability: true
                 });
             }
+        }
+
+        if (targetUser.is_blocked) {
+            return res.status(403).json({ success: false, message: 'تم حظرك بسبب مخالفة سياسة التطبيق' });
         }
 
         res.json({

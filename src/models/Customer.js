@@ -57,6 +57,42 @@ const Customer = sequelize.define('Customer', {
     bio: {
         type: DataTypes.TEXT,
         allowNull: true
+    },
+    is_blocked: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
+    },
+    verification_status: {
+        type: DataTypes.ENUM('none', 'pending', 'approved', 'rejected'),
+        defaultValue: 'none'
+    },
+    full_name_arabic: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    identity_number: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    id_card_front: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+    id_card_back: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+    selfie_image: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+    verification_refusal_reason: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+    support_notes: {
+        type: DataTypes.TEXT,
+        allowNull: true
     }
 }, {
     tableName: 'customers',

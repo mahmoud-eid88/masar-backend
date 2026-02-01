@@ -1,4 +1,4 @@
-const { Order, Customer, Courier, Wallet, Transaction } = require('../models');
+const { Order, Customer, Courier, Wallet, Transaction, Rating } = require('../models');
 
 exports.createOrder = async (req, res) => {
     try {
@@ -251,5 +251,150 @@ exports.getOrderDetails = async (req, res) => {
         res.json({ success: true, order });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
+    }
+};
+
+// Rate a delivered order
+exports.rateOrder = async (req, res) => {
+    try {
+        const { order_id } = req.params;
+        const { customer_id, rating, comment } = req.body;
+
+        // Validate rating
+        if (!rating || rating < 1 || rating > 5) {
+            return res.status(400).json({
+                success: false,
+                message: 'التقييم يجب أن يكون بين 1 و 5'
+            });
+        }
+
+        // Get the order
+        const order = await Order.findByPk(order_id);
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'الطلب غير موجود' });
+        }
+
+        if (order.status !== 'delivered') {
+            return res.status(400).json({
+                success: false,
+                message: 'لا يمكن تقييم طلب غير مكتمل'
+            });
+        }
+
+        if (!order.courier_id) {
+            return res.status(400).json({
+                success: false,
+                message: 'لا يوجد مندوب لهذا الطلب'
+            });
+        }
+
+        // Check if already rated
+        const existingRating = await Rating.findOne({ where: { order_id } });
+        if (existingRating) {
+            return res.status(400).json({
+                success: false,
+                message: 'تم تقييم هذا الطلب مسبقاً'
+            });
+        }
+
+        // Create rating
+        await Rating.create({
+            order_id,
+            customer_id,
+            courier_id: order.courier_id,
+            rating,
+            comment
+        });
+
+        // Update courier average rating
+        const courier = await Courier.findByPk(order.courier_id);
+        if (courier) {
+            const newTotalRatings = courier.total_ratings + 1;
+            const newAvgRating = ((courier.rating * courier.total_ratings) + rating) / newTotalRatings;
+
+            await courier.update({
+                rating: parseFloat(newAvgRating.toFixed(2)),
+                total_ratings: newTotalRatings
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'شكراً لتقييمك!'
+        });
+    } catch (error) {
+        console.error('Rate Order Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// Get customer's completed orders (order history)
+exports.getCustomerOrderHistory = async (req, res) => {
+    try {
+        const { customer_id } = req.params;
+
+        const orders = await Order.findAll({
+            where: {
+                customer_id,
+                status: 'delivered'
+            },
+            include: [
+                {
+                    model: Courier,
+                    attributes: ['id', 'name', 'phone', 'rating']
+                }
+            ],
+            order: [['updatedAt', 'DESC']]
+        });
+
+        // Get ratings for these orders
+        const orderIds = orders.map(o => o.id);
+        const ratings = await Rating.findAll({
+            where: { order_id: orderIds }
+        });
+
+        // Map ratings to orders
+        const ordersWithRatings = orders.map(order => {
+            const orderRating = ratings.find(r => r.order_id === order.id);
+            return {
+                ...order.toJSON(),
+                my_rating: orderRating ? orderRating.rating : null
+            };
+        });
+
+        res.json({ success: true, orders: ordersWithRatings });
+    } catch (error) {
+        console.error('Get Customer Order History Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// Check if order needs rating
+exports.checkOrderRating = async (req, res) => {
+    try {
+        const { order_id } = req.params;
+
+        const order = await Order.findByPk(order_id, {
+            include: [
+                { model: Courier, attributes: ['id', 'name', 'rating'] }
+            ]
+        });
+
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'الطلب غير موجود' });
+        }
+
+        const existingRating = await Rating.findOne({ where: { order_id } });
+
+        res.json({
+            success: true,
+            needs_rating: order.status === 'delivered' && !existingRating,
+            order: order.toJSON(),
+            rated: !!existingRating,
+            rating: existingRating ? existingRating.rating : null
+        });
+    } catch (error) {
+        console.error('Check Order Rating Error:', error);
+        res.status(500).json({ success: false, error: error.message });
     }
 };

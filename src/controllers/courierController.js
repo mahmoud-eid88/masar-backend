@@ -153,7 +153,20 @@ exports.getProfile = async (req, res) => {
             return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
         }
 
-        res.json({ success: true, user });
+        // Add order stats
+        const orderCounts = await Order.count({
+            where: {
+                [role === 'courier' ? 'courier_id' : 'customer_id']: id
+            }
+        });
+
+        res.json({
+            success: true,
+            user: {
+                ...user.toJSON(),
+                totalOrders: orderCounts
+            }
+        });
     } catch (error) {
         console.error('Get Profile Error:', error);
         res.status(500).json({ success: false, error: error.message });

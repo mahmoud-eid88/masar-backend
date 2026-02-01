@@ -165,3 +165,111 @@ exports.updateTicketStatus = async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+// Get user details for support (with order history)
+exports.getUserDetails = async (req, res) => {
+    try {
+        const { userId, role } = req.params;
+
+        let user;
+        if (role === 'customer') {
+            user = await Customer.findByPk(userId, {
+                attributes: { exclude: ['password'] }
+            });
+        } else if (role === 'courier') {
+            user = await Courier.findByPk(userId, {
+                attributes: { exclude: ['password'] }
+            });
+        }
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+        }
+
+        // Get user's orders
+        const orders = await Order.findAll({
+            where: role === 'customer'
+                ? { customer_id: userId }
+                : { courier_id: userId },
+            order: [['createdAt', 'DESC']],
+            limit: 20
+        });
+
+        // Get support history
+        const supportHistory = await SupportMessage.findAll({
+            where: { user_id: userId },
+            order: [['createdAt', 'DESC']],
+            limit: 10
+        });
+
+        res.json({
+            success: true,
+            user,
+            orders,
+            supportHistory,
+            orderCount: await Order.count({
+                where: role === 'customer'
+                    ? { customer_id: userId }
+                    : { courier_id: userId }
+            })
+        });
+    } catch (error) {
+        console.error('Get User Details Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// Update support notes for a user
+exports.updateSupportNotes = async (req, res) => {
+    try {
+        const { userId, role } = req.params;
+        const { notes } = req.body;
+
+        let user;
+        if (role === 'customer') {
+            user = await Customer.findByPk(userId);
+        } else if (role === 'courier') {
+            user = await Courier.findByPk(userId);
+        }
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+        }
+
+        await user.update({ support_notes: notes });
+
+        res.json({ success: true, message: 'تم حفظ الملاحظات' });
+    } catch (error) {
+        console.error('Update Support Notes Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// Search orders by order_code, ID, customer name, or phone
+exports.searchOrders = async (req, res) => {
+    try {
+        const { query } = req.query;
+
+        const orders = await Order.findAll({
+            where: {
+                [Op.or]: [
+                    { order_code: { [Op.iLike]: `%${query}%` } },
+                    { id: isNaN(query) ? 0 : parseInt(query) },
+                    { '$Customer.name$': { [Op.iLike]: `%${query}%` } },
+                    { '$Customer.phone$': { [Op.iLike]: `%${query}%` } }
+                ]
+            },
+            include: [
+                { model: Customer, attributes: ['id', 'name', 'phone', 'email'] },
+                { model: Courier, attributes: ['id', 'name', 'phone', 'email'] }
+            ],
+            order: [['createdAt', 'DESC']],
+            limit: 20
+        });
+
+        res.json({ success: true, orders });
+    } catch (error) {
+        console.error('Search Orders Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};

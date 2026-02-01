@@ -12,4 +12,11 @@ router.get('/tickets', supportController.getAllTickets);
 router.get('/order/:orderId', supportController.getOrderDetailsForSupport);
 router.patch('/ticket/:userId/status', supportController.updateTicketStatus);
 
+// User details and notes for support
+router.get('/user/:role/:userId', supportController.getUserDetails);
+router.patch('/user/:role/:userId/notes', supportController.updateSupportNotes);
+
+// Order search
+router.get('/orders/search', supportController.searchOrders);
+
 module.exports = router;

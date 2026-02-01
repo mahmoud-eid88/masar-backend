@@ -9,6 +9,11 @@ const Order = sequelize.define('Order', {
         primaryKey: true,
         autoIncrement: true
     },
+    order_code: {
+        type: DataTypes.STRING(20),
+        unique: true,
+        allowNull: true // Will be set after creation
+    },
     pickup_latitude: {
         type: DataTypes.FLOAT,
         allowNull: false
@@ -33,12 +38,21 @@ const Order = sequelize.define('Order', {
         allowNull: false
     },
     status: {
-        type: DataTypes.ENUM('waiting', 'accepted', 'picked_up', 'in_delivery', 'delivered'),
+        type: DataTypes.ENUM('waiting', 'accepted', 'picked_up', 'in_delivery', 'delivered', 'cancelled'),
         defaultValue: 'waiting'
     }
 }, {
     tableName: 'orders',
-    timestamps: true
+    timestamps: true,
+    hooks: {
+        afterCreate: async (order) => {
+            // Generate unique order code: MSR-YYYYMMDD-XXXX
+            const date = new Date();
+            const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
+            const orderCode = `MSR-${dateStr}-${String(order.id).padStart(4, '0')}`;
+            await order.update({ order_code: orderCode });
+        }
+    }
 });
 
 // Relationships

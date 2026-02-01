@@ -61,11 +61,24 @@ exports.getDashboardStats = async (req, res) => {
 
         const todayRevenue = todayDelivered.reduce((sum, order) => sum + parseFloat(order.price || 0), 0);
 
+        // Monthly orders count
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+        const monthlyOrders = await Order.count({
+            where: {
+                createdAt: {
+                    [Op.gte]: monthStart,
+                    [Op.lt]: monthEnd
+                }
+            }
+        });
+
         res.json({
             success: true,
             stats: {
                 totalOrders,
                 todayOrders,
+                monthlyOrders,
                 totalCustomers,
                 totalCouriers,
                 activeCouriers,
@@ -235,7 +248,7 @@ exports.updateUserRole = async (req, res) => {
                     name: currentUser.name,
                     email: currentUser.email,
                     password: currentUser.password,
-                    phone: currentUser.phone
+                    phone: currentUser.phone || ''
                 });
             }
         } else if (targetRole === 'courier') {
@@ -245,7 +258,7 @@ exports.updateUserRole = async (req, res) => {
                     name: currentUser.name,
                     email: currentUser.email,
                     password: currentUser.password,
-                    phone: currentUser.phone,
+                    phone: currentUser.phone || '',
                     availability: true
                 });
             }
@@ -256,9 +269,11 @@ exports.updateUserRole = async (req, res) => {
                     name: currentUser.name,
                     email: currentUser.email,
                     password: currentUser.password,
-                    phone: currentUser.phone,
+                    phone: currentUser.phone || '',
                     role: 'support'
                 });
+            } else {
+                await targetUser.update({ role: 'support' });
             }
         } else if (targetRole === 'admin') {
             targetUser = await Admin.findOne({ where: { email: currentUser.email } });
@@ -267,7 +282,7 @@ exports.updateUserRole = async (req, res) => {
                     name: currentUser.name,
                     email: currentUser.email,
                     password: currentUser.password,
-                    phone: currentUser.phone,
+                    phone: currentUser.phone || '',
                     role: 'admin'
                 });
             } else {
@@ -290,3 +305,93 @@ exports.updateUserRole = async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+exports.toggleUserBlock = async (req, res) => {
+    try {
+        const { userId, role } = req.body;
+
+        let user;
+        if (role === 'customer') {
+            user = await Customer.findByPk(userId);
+        } else if (role === 'courier') {
+            user = await Courier.findByPk(userId);
+        }
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+        }
+
+        const newBlockStatus = !user.is_blocked;
+        await user.update({ is_blocked: newBlockStatus });
+
+        res.json({
+            success: true,
+            message: newBlockStatus ? 'تم حظر المستخدم بنجاح' : 'تم إلغاء حظر المستخدم',
+            is_blocked: newBlockStatus
+        });
+    } catch (error) {
+        console.error('Toggle User Block Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.getVerifications = async (req, res) => {
+    try {
+        const { status = 'pending' } = req.query;
+
+        const customers = await Customer.findAll({
+            where: { verification_status: status },
+            attributes: { exclude: ['password'] }
+        });
+
+        const couriers = await Courier.findAll({
+            where: { verification_status: status },
+            attributes: { exclude: ['password'] }
+        });
+
+        const requests = [
+            ...customers.map(c => ({ ...c.toJSON(), role: 'customer' })),
+            ...couriers.map(c => ({ ...c.toJSON(), role: 'courier' }))
+        ];
+
+        res.json({ success: true, requests });
+    } catch (error) {
+        console.error('Get Verifications Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.reviewVerification = async (req, res) => {
+    try {
+        const { userId, role, status, refusalReason } = req.body;
+
+        if (!['approved', 'rejected'].includes(status)) {
+            return res.status(400).json({ success: false, message: 'حالة غير صالحة' });
+        }
+
+        let user;
+        if (role === 'customer') {
+            user = await Customer.findByPk(userId);
+        } else if (role === 'courier') {
+            user = await Courier.findByPk(userId);
+        }
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'المستخدم غير موجود' });
+        }
+
+        await user.update({
+            verification_status: status,
+            verification_refusal_reason: status === 'rejected' ? refusalReason : null
+        });
+
+        res.json({
+            success: true,
+            message: status === 'approved' ? 'تم توثيق الحساب بنجاح' : 'تم رفض طلب التوثيق'
+        });
+    } catch (error) {
+        console.error('Review Verification Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
