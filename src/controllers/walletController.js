@@ -209,6 +209,18 @@ exports.reviewWithdrawal = async (req, res) => {
             status
         });
 
+        // Send Push Notification
+        const pushService = require('../services/notificationService');
+        pushService.sendPushNotification(
+            wallet.user_id,
+            wallet.role,
+            status === 'approved' ? 'تمت الموافقة على سحب الرصيد' : 'تم رفض طلب سحب الرصيد',
+            status === 'approved'
+                ? `تم تحول مبلغ ${transaction.amount} جنيه إلى حسابك بنجاح.`
+                : `نعتذر، تم رفض طلب سحب مبلغ ${transaction.amount} جنيه.`,
+            { type: 'wallet_update' }
+        ).catch(err => console.error('Push Error:', err));
+
         res.json({ success: true, message: `Withdrawal ${status}` });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });

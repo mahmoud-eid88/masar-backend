@@ -42,6 +42,16 @@ exports.processReferralReward = async (userId, role) => {
                 description: `مكافأة دعوة صديق (${user.name})`
             });
 
+            // Send Push Notification
+            const pushService = require('./notificationService');
+            pushService.sendPushNotification(
+                user.referred_by_id,
+                role,
+                'مبروك! حصلت على مكافأة',
+                `تم إضافة ${rewardAmount} جنيه إلى محفظتك لدعوة ${user.name}`,
+                { type: 'referral_reward' }
+            ).catch(err => console.error('Push Error:', err));
+
             console.log(`Referral reward of ${rewardAmount} given to ${role} ${user.referred_by_id}`);
         }
     } catch (error) {

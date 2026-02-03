@@ -10,8 +10,10 @@ const {
     getReferralStats
 } = require('../controllers/authController');
 
-router.post('/register', register);
-router.post('/login', login);
+const { validate, schemas } = require('../middlewares/validationMiddleware');
+
+router.post('/register', validate(schemas.auth.register), register);
+router.post('/login', validate(schemas.auth.login), login);
 router.get('/referral-stats', getReferralStats);
 router.post('/switch-role', require('../controllers/authController').switchRole);
 router.post('/customer/register', registerCustomer);

@@ -20,11 +20,13 @@ const {
     updateDestinationProgress
 } = require('../controllers/orderController');
 
+const { validate, schemas } = require('../middlewares/validationMiddleware');
+
 router.get('/estimate', estimatePrice); // [NEW] Smart Pricing Endpoint
 router.post('/validate-promo', validatePromo); // [NEW] Promo Validation Endpoint
 router.patch('/:order_id/destination-progress', updateDestinationProgress); // [NEW] Multi-stop progress
-router.post('/', createOrder);
-router.post('/create', createOrder); // 🩹 FIX: Alias for mobile app
+router.post('/', validate(schemas.order.create), createOrder);
+router.post('/create', validate(schemas.order.create), createOrder); // 🩹 FIX: Alias for mobile app
 router.post('/:order_id/accept', acceptOrder);
 router.patch('/:order_id/status', updateOrderStatus);
 router.get('/nearby', getNearbyOrders);

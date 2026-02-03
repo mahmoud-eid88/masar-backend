@@ -6,6 +6,7 @@ const { authenticateToken } = require('../middlewares/authMiddleware'); // Added
 
 // Dashboard statistics
 router.get('/stats', adminController.getDashboardStats);
+router.get('/stats/growth', authenticateToken, adminController.getReferralStats);
 
 // User management
 router.get('/users', adminController.getAllUsers);

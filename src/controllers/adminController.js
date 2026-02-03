@@ -1,4 +1,4 @@
-const { Order, Courier, Customer, Admin } = require('../models');
+const { Order, Courier, Customer, Admin, Wallet, Transaction } = require('../models');
 const { Op } = require('sequelize');
 
 exports.getDashboardStats = async (req, res) => {
@@ -444,6 +444,42 @@ exports.reviewVerification = async (req, res) => {
         });
     } catch (error) {
         console.error('Review Verification Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.getReferralStats = async (req, res) => {
+    try {
+        const totalReferrals = await Customer.count({
+            where: { referred_by_id: { [Op.ne]: null } }
+        }) + await Courier.count({
+            where: { referred_by_id: { [Op.ne]: null } }
+        });
+
+        const totalRewards = await Transaction.sum('amount', {
+            where: { description: { [Op.like]: '%مكافأة دعوة صديق%' } }
+        }) || 0;
+
+        // Top Referrers (Simplified for CSV/MVP)
+        const topCustomerReferrers = await Customer.findAll({
+            attributes: [
+                'id', 'name', 'phone',
+                [require('sequelize').literal('(SELECT COUNT(*) FROM customers WHERE referred_by_id = "Customer"."id")'), 'referralCount']
+            ],
+            order: [[require('sequelize').literal('"referralCount"'), 'DESC']],
+            limit: 10
+        });
+
+        res.json({
+            success: true,
+            stats: {
+                totalReferrals,
+                totalRewards: parseFloat(totalRewards).toFixed(2),
+                topReferrers: topCustomerReferrers
+            }
+        });
+    } catch (error) {
+        console.error('Get Referral Stats Error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 };

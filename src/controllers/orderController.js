@@ -157,7 +157,16 @@ exports.createOrder = async (req, res) => {
 
         if (nearbyCouriers.length > 0) {
             nearbyCouriers.forEach(c => {
-                io.to(`user_${c.id} `).emit('new_order_nearby', order);
+                io.to(`user_${c.id}`).emit('new_order_nearby', order);
+
+                // Send Push Notification
+                pushService.sendPushNotification(
+                    c.id,
+                    'courier',
+                    'طلب جديد متاح',
+                    'يوجد طلب جديد متاح بالقرب منك، سارع بقبوله!',
+                    { type: 'new_order', orderId: order.id.toString() }
+                ).catch(err => console.error('Push Error:', err));
             });
         }
 
@@ -246,7 +255,16 @@ exports.acceptOrder = async (req, res) => {
 
         // Notify customer via socket
         const io = req.app.get('io');
-        io.to(`order_${order.id} `).emit('order_status_updated', { order_id, status: 'accepted' });
+        io.to(`order_${order.id}`).emit('order_status_updated', { order_id, status: 'accepted' });
+
+        // Send Push Notification
+        pushService.sendPushNotification(
+            order.customer_id,
+            'customer',
+            'تم قبول طلبك',
+            'المندوب وافق على طلبك وهو الآن في الطريق إليك',
+            { type: 'order_status', orderId: order.id.toString() }
+        ).catch(err => console.error('Push Error:', err));
 
         // Update admin stats
         adminController.emitDashboardStats(io);
@@ -314,7 +332,7 @@ exports.updateOrderStatus = async (req, res) => {
                 await Notification.create({
                     user_id: order.customer_id,
                     role: 'customer',
-                    type: `ORDER_${status.toUpperCase()} `,
+                    type: `ORDER_${status.toUpperCase()}`,
                     title: notificationTitle,
                     message: notificationMessage,
                     data: { order_id }
@@ -326,7 +344,7 @@ exports.updateOrderStatus = async (req, res) => {
                     'customer',
                     notificationTitle,
                     notificationMessage,
-                    { order_id: order.id.toString(), status }
+                    { type: 'order_status', orderId: order.id.toString(), status }
                 ).catch(err => console.error('Push Error:', err));
             }
 
@@ -501,7 +519,7 @@ exports.getAllOrders = async (req, res) => {
         const orders = await Order.findAll({
             include: [
                 { model: Customer, attributes: ['name', 'phone'] },
-                { model: Courier, attributes: ['name', 'phone'] }
+                { model: Courier, attributes: ['name', 'phone', 'verification_status', 'profile_image'] }
             ],
             order: [['createdAt', 'DESC']]
         });
@@ -517,7 +535,7 @@ exports.getOrderDetails = async (req, res) => {
         const order = await Order.findByPk(order_id, {
             include: [
                 { model: Customer, attributes: ['id', 'name', 'phone'] },
-                { model: Courier, attributes: ['id', 'name', 'phone', 'vehicle_type', 'vehicle_plate', 'rating'] }
+                { model: Courier, attributes: ['id', 'name', 'phone', 'vehicle_type', 'vehicle_plate', 'rating', 'verification_status', 'profile_image'] }
             ]
         });
 
@@ -732,15 +750,30 @@ exports.proposePrice = async (req, res) => {
             action: 'proposal',
             price: price
         });
+        const courier = await Courier.findByPk(courier_id, {
+            attributes: ['id', 'name', 'verification_status', 'profile_image', 'rating']
+        });
 
-        // Notify customer
+        // Notify customer via socket
         const io = req.app.get('io');
-        io.to(`order_${order.id} `).emit('price_proposal', {
+        io.to(`order_${order.id}`).emit('price_proposal', {
             order_id: order.id,
             price: price,
             courier_id: courier_id,
+            courier_name: courier ? courier.name : 'Mandoob',
+            courier_verified: courier ? courier.verification_status === 'approved' : false,
+            courier_rating: courier ? courier.rating : 5.0,
             type: 'proposal'
         });
+
+        // Send Push Notification
+        pushService.sendPushNotification(
+            order.customer_id,
+            'customer',
+            'عرض سعر جديد',
+            `وصلك عرض سعر جديد بقيمة ${price} جنيه من المندوب ${courier ? courier.name : ''}`,
+            { type: 'price_proposal', orderId: order.id.toString() }
+        ).catch(err => console.error('Push Error:', err));
 
         res.json({ success: true, message: 'تم إرسال العرض' });
     } catch (error) {
@@ -784,10 +817,19 @@ exports.respondToProposal = async (req, res) => {
                 order: order.toJSON()
             });
             // Also specific event
-            io.to(`order_${order.id} `).emit('proposal_response', {
+            io.to(`order_${order.id}`).emit('proposal_response', {
                 status: 'accepted',
                 order_id: order.id
             });
+
+            // Send Push Notification to Courier
+            pushService.sendPushNotification(
+                courier_id,
+                'courier',
+                'تم قبول عرضك',
+                `العميل وافق على عرض السعر الخاص بك للطلب #${order.id}`,
+                { type: 'proposal_response', orderId: order.id.toString(), status: 'accepted' }
+            ).catch(err => console.error('Push Error:', err));
 
         } else if (response === 'reject') {
             await order.update({
@@ -803,11 +845,20 @@ exports.respondToProposal = async (req, res) => {
                 action: 'rejection'
             });
 
-            const io = req.app.get('io');
-            io.to(`order_${order.id} `).emit('proposal_response', {
+            // Also specific event
+            io.to(`order_${order.id}`).emit('proposal_response', {
                 status: 'rejected',
                 order_id: order.id
             });
+
+            // Send Push Notification to Courier
+            pushService.sendPushNotification(
+                courier_id,
+                'courier',
+                'تم رفض عرضك',
+                `نعتذر، العميل رفض عرض السعر الخاص بك للطلب #${order.id}`,
+                { type: 'proposal_response', orderId: order.id.toString(), status: 'rejected' }
+            ).catch(err => console.error('Push Error:', err));
         }
 
         res.json({ success: true, message: `Term response: ${response} ` });

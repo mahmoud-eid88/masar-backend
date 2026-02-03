@@ -4,6 +4,8 @@ dotenv.config();
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const { sequelize } = require('./models');
 
 // Import Routes
@@ -58,6 +60,30 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Request Logging (Use 'tiny' or 'combined' in production for less noise)
 app.use(morgan('tiny'));
 
+// Security Middlewares
+app.use(helmet()); // Set security headers
+app.set('trust proxy', 1); // For Railway/Render load balancers
+
+// Rate Limiting
+const globalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per window
+    message: { success: false, message: 'Too many requests, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+const authLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 20, // Limit each IP to 20 login/register attempts per hour
+    message: { success: false, message: 'Too many auth attempts. Try again in an hour.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+app.use('/api/', globalLimiter);
+app.use('/api/auth/', authLimiter);
+
 // ==========================================
 // API Routes
 // ==========================================
@@ -75,8 +101,11 @@ app.use(`${API_PREFIX}/couriers`, courierRoutes);
 app.use(`${API_PREFIX}/support`, supportRoutes);
 app.use(`${API_PREFIX}/notifications`, notificationRoutes);
 
+const logger = require('./services/loggerService');
+
 // Health Check Route (for Railway/AWS lb)
 app.get('/', (req, res) => {
+    logger.info('Health check pinged');
     res.status(200).json({
         status: 'online',
         message: 'Masar Backend API is running',
@@ -88,7 +117,7 @@ app.get('/', (req, res) => {
 // Error Handling
 // ==========================================
 app.use((err, req, res, next) => {
-    console.error('🔥 Unhandled Error:', err.stack);
+    logger.error(`🔥 Unhandled Error: ${err.message}`, { stack: err.stack });
     res.status(500).json({
         success: false,
         error: 'Internal Server Error',

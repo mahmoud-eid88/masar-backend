@@ -1,10 +1,8 @@
-const axios = require('axios');
 const { Customer, Courier } = require('../models');
+const { admin, isFirebaseInitialized } = require('../config/firebase');
 
 /**
  * Service to handle push notification dispatching
- * In a real production environment, this would use 'firebase-admin'
- * For this implementation, we will create the infrastructure that can be easily linked to FCM.
  */
 
 exports.sendPushNotification = async (userId, role, title, body, data = {}) => {
@@ -23,15 +21,27 @@ exports.sendPushNotification = async (userId, role, title, body, data = {}) => {
 
         console.log(`[PUSH DISPATCH] To: ${user.fcm_token} | Title: ${title} | Body: ${body}`);
 
-        // Placeholder for FCM call:
-        /*
-        const message = {
-            notification: { title, body },
-            data: data,
-            token: user.fcm_token,
-        };
-        await admin.messaging().send(message);
-        */
+        if (isFirebaseInitialized) {
+            const message = {
+                notification: { title, body },
+                data: {
+                    ...data,
+                    click_action: 'FLUTTER_NOTIFICATION_CLICK'
+                },
+                token: user.fcm_token,
+                android: {
+                    priority: 'high',
+                    notification: {
+                        sound: 'default',
+                        channelId: 'masar_notifications'
+                    }
+                }
+            };
+            await admin.messaging().send(message);
+            console.log(`✅ FCM sent successfully to ${role} ${userId}`);
+        } else {
+            console.log(`📝 FCM (Simulated) for ${role} ${userId}: ${title} - ${body}`);
+        }
 
         return true;
     } catch (error) {
