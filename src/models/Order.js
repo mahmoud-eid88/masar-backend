@@ -40,6 +40,22 @@ const Order = sequelize.define('Order', {
     status: {
         type: DataTypes.ENUM('waiting', 'accepted', 'picked_up', 'in_delivery', 'delivered', 'cancelled'),
         defaultValue: 'waiting'
+    },
+    destinations: {
+        type: DataTypes.JSON, // Stores array of {lat, lng, address} for multi-stop
+        allowNull: true
+    },
+    proposed_price: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true
+    },
+    negotiation_status: {
+        type: DataTypes.ENUM('none', 'courier_proposal', 'customer_counter', 'accepted'),
+        defaultValue: 'none'
+    },
+    accepted_at: {
+        type: DataTypes.DATE,
+        allowNull: true
     }
 }, {
     tableName: 'orders',

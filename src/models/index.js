@@ -9,6 +9,8 @@ const Transaction = require('./Transaction');
 const SecurityLog = require('./SecurityLog');
 const Rating = require('./Rating');
 const OrderMessage = require('./OrderMessage');
+const SupportTicket = require('./SupportTicket');
+const NegotiationLog = require('./NegotiationLog');
 
 const db = {
     sequelize,
@@ -21,7 +23,9 @@ const db = {
     Transaction,
     SecurityLog,
     Rating,
-    OrderMessage
+    OrderMessage,
+    SupportTicket,
+    NegotiationLog
 };
 
 module.exports = db;

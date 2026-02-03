@@ -1,8 +1,8 @@
-const { Order, Customer, Courier, Wallet, Transaction, Rating } = require('../models');
+const { Order, Customer, Courier, Wallet, Transaction, Rating, NegotiationLog } = require('../models');
 
 exports.createOrder = async (req, res) => {
     try {
-        const { customer_id, pickup_location, dropoff_location, details, price, courier_id } = req.body;
+        const { customer_id, pickup_location, dropoff_location, destinations, details, price, courier_id } = req.body;
 
         // pickup_location and dropoff_location should be { lat, lng } or similar
         // For Sequelize GEOMETRY, we need { type: 'Point', coordinates: [lng, lat] }
@@ -29,6 +29,7 @@ exports.createOrder = async (req, res) => {
             pickup_longitude: pickup_location.lng,
             dropoff_latitude: dropoff_location.lat,
             dropoff_longitude: dropoff_location.lng,
+            destinations: destinations || null, // Store multi-stop details
             details,
             price,
             status: 'waiting' // Always waiting initially, even if specific courier (courier must accept)
@@ -395,6 +396,147 @@ exports.checkOrderRating = async (req, res) => {
         });
     } catch (error) {
         console.error('Check Order Rating Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// Get courier's delivered orders (history)
+exports.getCourierOrderHistory = async (req, res) => {
+    try {
+        const { courier_id } = req.params;
+
+        const orders = await Order.findAll({
+            where: {
+                courier_id,
+                status: 'delivered'
+            },
+            include: [
+                {
+                    model: Customer,
+                    attributes: ['id', 'name', 'phone']
+                }
+            ],
+            order: [['updatedAt', 'DESC']]
+        });
+
+        res.json({ success: true, orders });
+    } catch (error) {
+        console.error('Get Courier Order History Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+// Calculate distance function (helper) - usually outside exports
+// ... exists above ...
+
+// Propose a price (Courier)
+exports.proposePrice = async (req, res) => {
+    try {
+        const { order_id } = req.params;
+        const { price, courier_id } = req.body;
+
+        const order = await Order.findByPk(order_id);
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'الطلب غير موجود' });
+        }
+
+        if (order.status !== 'waiting') {
+            return res.status(400).json({ success: false, message: 'لا يمكن التفاوض على هذا الطلب' });
+        }
+
+        await order.update({
+            proposed_price: price,
+            courier_id: courier_id, // Lock negotiation to this courier temporarily? Or just propose
+            negotiation_status: 'courier_proposal'
+        });
+
+        // Log negotiation
+        await NegotiationLog.create({
+            order_id: order.id,
+            sender_role: 'courier',
+            action: 'proposal',
+            price: price
+        });
+
+        // Notify customer
+        const io = req.app.get('io');
+        io.to(`order_${order.id}`).emit('price_proposal', {
+            order_id: order.id,
+            price: price,
+            courier_id: courier_id,
+            type: 'proposal'
+        });
+
+        res.json({ success: true, message: 'تم إرسال العرض' });
+    } catch (error) {
+        console.error('Propose Price Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// Respond to proposal (Customer)
+exports.respondToProposal = async (req, res) => {
+    try {
+        const { order_id } = req.params;
+        const { response, courier_id } = req.body; // response: 'accept', 'reject'
+
+        const order = await Order.findByPk(order_id);
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'الطلب غير موجود' });
+        }
+
+        if (response === 'accept') {
+            await order.update({
+                price: order.proposed_price, // Update actual price
+                status: 'accepted',
+                negotiation_status: 'accepted',
+                courier_id: courier_id, // Assign courier
+                accepted_at: new Date()
+            });
+
+            // Log acceptance
+            await NegotiationLog.create({
+                order_id: order.id,
+                sender_role: 'customer',
+                action: 'acceptance',
+                price: order.proposed_price
+            });
+
+            // Notify courier
+            const io = req.app.get('io');
+            io.emit('order_assigned', { // Broadcast to all or specific courier
+                courier_id: courier_id,
+                order: order.toJSON()
+            });
+            // Also specific event
+            io.to(`order_${order.id}`).emit('proposal_response', {
+                status: 'accepted',
+                order_id: order.id
+            });
+
+        } else if (response === 'reject') {
+            await order.update({
+                negotiation_status: 'none',
+                proposed_price: null
+                // keep courier_id null or revert if it was set
+            });
+
+            // Log rejection
+            await NegotiationLog.create({
+                order_id: order.id,
+                sender_role: 'customer',
+                action: 'rejection'
+            });
+
+            const io = req.app.get('io');
+            io.to(`order_${order.id}`).emit('proposal_response', {
+                status: 'rejected',
+                order_id: order.id
+            });
+        }
+
+        res.json({ success: true, message: `Term response: ${response}` });
+    } catch (error) {
+        console.error('Respond Proposal Error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 };

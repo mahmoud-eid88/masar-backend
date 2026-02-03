@@ -93,6 +93,10 @@ const Courier = sequelize.define('Courier', {
     support_notes: {
         type: DataTypes.TEXT,
         allowNull: true
+    },
+    last_seen_at: {
+        type: DataTypes.DATE,
+        allowNull: true
     }
 }, {
     tableName: 'couriers',

@@ -40,26 +40,20 @@ exports.getDashboardStats = async (req, res) => {
         });
 
         // Calculate total revenue (completed orders * price)
-        const completedOrders = await Order.findAll({
-            where: { status: 'delivered' },
-            attributes: ['price']
-        });
-
-        const totalRevenue = completedOrders.reduce((sum, order) => sum + parseFloat(order.price || 0), 0);
+        const totalRevenue = await Order.sum('price', {
+            where: { status: 'delivered' }
+        }) || 0;
 
         // Today's revenue
-        const todayDelivered = await Order.findAll({
+        const todayRevenue = await Order.sum('price', {
             where: {
                 status: 'delivered',
                 updatedAt: {
                     [Op.gte]: today,
                     [Op.lt]: tomorrow
                 }
-            },
-            attributes: ['price']
-        });
-
-        const todayRevenue = todayDelivered.reduce((sum, order) => sum + parseFloat(order.price || 0), 0);
+            }
+        }) || 0;
 
         // Monthly orders count
         const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -86,8 +80,8 @@ exports.getDashboardStats = async (req, res) => {
                 activeOrders,
                 deliveredOrders,
                 totalStaff: await Admin.count(),
-                totalRevenue: totalRevenue.toFixed(2),
-                todayRevenue: todayRevenue.toFixed(2)
+                totalRevenue: parseFloat(totalRevenue).toFixed(2),
+                todayRevenue: parseFloat(todayRevenue).toFixed(2)
             }
         });
     } catch (error) {

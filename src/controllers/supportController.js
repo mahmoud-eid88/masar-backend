@@ -75,37 +75,23 @@ exports.replyMessage = async (req, res) => {
 // Get all support tickets for support agents
 exports.getAllTickets = async (req, res) => {
     try {
-        // Get unique users with their latest message
-        const users = await SupportMessage.findAll({
-            attributes: ['user_id', 'user_name', 'user_role', 'status'],
-            group: ['user_id', 'user_name', 'user_role', 'status'],
-            order: [['createdAt', 'DESC']]
-        });
+        const { QueryTypes } = require('sequelize');
 
-        // Get message count and last message for each user
-        const tickets = await Promise.all(users.map(async (user) => {
-            const lastMessage = await SupportMessage.findOne({
-                where: { user_id: user.user_id },
-                order: [['createdAt', 'DESC']]
-            });
-            const messageCount = await SupportMessage.count({
-                where: { user_id: user.user_id }
-            });
-            const unreadCount = await SupportMessage.count({
-                where: { user_id: user.user_id, is_support: false, status: 'open' }
-            });
-
-            return {
-                user_id: user.user_id,
-                user_name: user.user_name,
-                user_role: user.user_role,
-                status: user.status,
-                lastMessage: lastMessage?.content,
-                lastMessageTime: lastMessage?.createdAt,
-                messageCount,
-                unreadCount
-            };
-        }));
+        // Optimized query to get all ticket stats in one go
+        const tickets = await SupportMessage.sequelize.query(`
+            SELECT 
+                user_id,
+                user_name,
+                user_role,
+                MAX(CASE WHEN status IS NOT NULL THEN status ELSE 'open' END) as status,
+                MAX("createdAt") as "lastMessageTime",
+                (SELECT content FROM "SupportMessages" sm2 WHERE sm2.user_id = sm.user_id ORDER BY sm2."createdAt" DESC LIMIT 1) as "lastMessage",
+                COUNT(*) as "messageCount",
+                COUNT(CASE WHEN is_support = false AND status = 'open' THEN 1 END) as "unreadCount"
+            FROM "SupportMessages" as sm
+            GROUP BY user_id, user_name, user_role
+            ORDER BY "lastMessageTime" DESC
+        `, { type: QueryTypes.SELECT });
 
         res.json({ success: true, tickets });
     } catch (error) {

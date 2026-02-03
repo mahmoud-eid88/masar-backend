@@ -28,14 +28,26 @@ exports.updateLocation = async (req, res) => {
 exports.updateAvailability = async (req, res) => {
     try {
         const { courierId } = req.params;
-        const { availability } = req.body;
+        const { availability, latitude, longitude } = req.body;
 
         const courier = await Courier.findByPk(courierId);
         if (!courier) {
             return res.status(404).json({ success: false, message: 'المندوب غير موجود' });
         }
 
-        await courier.update({ availability });
+        // Build update object
+        const updateData = { availability };
+
+        // If going online, update location and last_seen_at
+        if (availability) {
+            updateData.last_seen_at = new Date();
+            if (latitude !== undefined && longitude !== undefined) {
+                updateData.latitude = latitude;
+                updateData.longitude = longitude;
+            }
+        }
+
+        await courier.update(updateData);
 
         res.json({
             success: true,
@@ -48,9 +60,10 @@ exports.updateAvailability = async (req, res) => {
     }
 };
 
-// Get nearby couriers with distance
+// Get nearby couriers with distance (includes recently active in last 10 minutes)
 exports.getNearbyCouriers = async (req, res) => {
     try {
+        const { Op } = require('sequelize');
         const { lat, lng } = req.query;
 
         if (!lat || !lng) {
@@ -60,10 +73,18 @@ exports.getNearbyCouriers = async (req, res) => {
         const customerLat = parseFloat(lat);
         const customerLng = parseFloat(lng);
 
-        // Get all available couriers
+        // Time threshold: 10 minutes ago
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+
+        // Get available couriers OR recently active (last 10 minutes)
         const couriers = await Courier.findAll({
-            where: { availability: true },
-            attributes: ['id', 'name', 'latitude', 'longitude', 'rating', 'phone']
+            where: {
+                [Op.or]: [
+                    { availability: true },
+                    { last_seen_at: { [Op.gte]: tenMinutesAgo } }
+                ]
+            },
+            attributes: ['id', 'name', 'latitude', 'longitude', 'rating', 'phone', 'availability', 'last_seen_at']
         });
 
         // Calculate distance for each courier (Haversine formula)
@@ -74,12 +95,20 @@ exports.getNearbyCouriers = async (req, res) => {
                     customerLat, customerLng,
                     courier.latitude, courier.longitude
                 );
+                const courierData = courier.toJSON();
                 return {
-                    ...courier.toJSON(),
-                    distance: Math.round(distance * 10) / 10 // Round to 1 decimal
+                    ...courierData,
+                    distance: Math.round(distance * 10) / 10,
+                    isOnline: courierData.availability === true,
+                    recentlyActive: !courierData.availability && courierData.last_seen_at && new Date(courierData.last_seen_at) >= tenMinutesAgo
                 };
             })
-            .sort((a, b) => a.distance - b.distance);
+            .sort((a, b) => {
+                // Online couriers first, then by distance
+                if (a.isOnline && !b.isOnline) return -1;
+                if (!a.isOnline && b.isOnline) return 1;
+                return a.distance - b.distance;
+            });
 
         res.json({
             success: true,
@@ -136,7 +165,7 @@ exports.toggleAvailability = async (req, res) => {
 exports.getProfile = async (req, res) => {
     try {
         const { role, id } = req.params;
-        const { Customer } = require('../models');
+        const { Customer, Order } = require('../models');
 
         let user;
         if (role === 'courier') {
@@ -154,9 +183,23 @@ exports.getProfile = async (req, res) => {
         }
 
         // Add order stats
-        const orderCounts = await Order.count({
+        const totalOrders = await Order.count({
             where: {
                 [role === 'courier' ? 'courier_id' : 'customer_id']: id
+            }
+        });
+
+        const activeOrders = await Order.count({
+            where: {
+                [role === 'courier' ? 'courier_id' : 'customer_id']: id,
+                status: ['waiting', 'accepted', 'picked_up', 'in_delivery']
+            }
+        });
+
+        const deliveredOrders = await Order.count({
+            where: {
+                [role === 'courier' ? 'courier_id' : 'customer_id']: id,
+                status: 'delivered'
             }
         });
 
@@ -164,7 +207,9 @@ exports.getProfile = async (req, res) => {
             success: true,
             user: {
                 ...user.toJSON(),
-                totalOrders: orderCounts
+                totalOrders,
+                activeOrders,
+                deliveredOrders
             }
         });
     } catch (error) {

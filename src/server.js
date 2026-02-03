@@ -8,60 +8,79 @@ const PORT = process.env.PORT || 5000;
 
 const server = http.createServer(app);
 
-// Initialize Socket.io
+// ==========================================
+// Socket.IO Configuration
+// ==========================================
 const io = new Server(server, {
     cors: {
-        origin: "*",
+        origin: "*", // Allow connections from any mobile/web client
         methods: ["GET", "POST"]
-    }
+    },
+    transports: ['websocket', 'polling'] // Ensure compatibility
 });
 
 io.on('connection', (socket) => {
-    console.log('A user connected:', socket.id);
+    console.log(`🔌 Socket Connected: ${socket.id}`);
 
+    // Join specific order room for chat/updates
     socket.on('join_order_room', (orderId) => {
-        socket.join(`order_${orderId}`);
-        console.log(`User joined order room: ${orderId}`);
+        const roomName = `order_${orderId}`;
+        socket.join(roomName);
+        console.log(`👤 Socket ${socket.id} joined room: ${roomName}`);
     });
 
+    // Real-time Courier Location Updates
     socket.on('update_location', async (data) => {
         const { courier_id, location } = data;
+        if (!courier_id || !location) return;
+
         const cid = parseInt(courier_id);
 
         try {
-            // 1. Update Courier location in DB (for nearby searching)
+            // 1. Update Courier DB record (for static nearby searches)
             await Courier.update(
                 { latitude: location.lat, longitude: location.lng },
                 { where: { id: cid } }
             );
 
-            // 2. Find all active orders for this courier
+            // 2. Find active orders assigned to this courier (Accepted/Picked Up/In Delivery)
             const activeOrders = await Order.findAll({
                 where: {
                     courier_id: cid,
                     status: { [Op.in]: ['accepted', 'picked_up', 'in_delivery'] }
-                }
+                },
+                attributes: ['id'] // Only need IDs
             });
 
-            const updateData = { courier_id: cid, location };
-
-            // 3. Broadcast to each specific order room
+            // 3. Broadcast new location to specific order rooms
+            const updatePayload = { courier_id: cid, location };
             activeOrders.forEach(order => {
-                io.to(`order_${order.id}`).emit('courier_location_updated', updateData);
+                io.to(`order_${order.id}`).emit('courier_location_updated', updatePayload);
             });
+
         } catch (error) {
-            console.error('Error in update_location socket handler:', error);
+            console.error(`❌ Location Update Error (Courier ${cid}):`, error.message);
         }
     });
 
+    // Chat Typing Indicators
+    socket.on('typing', (data) => {
+        // data: { order_id, sender_id }
+        socket.to(`order_${data.order_id}`).emit('typing', data);
+    });
+
     socket.on('disconnect', () => {
-        console.log('User disconnected');
+        console.log(`🔌 Socket Disconnected: ${socket.id}`);
     });
 });
 
-// Attach io to app for use in controllers
+// Attach IO to app for legacy controller access if needed
 app.set('io', io);
 
+// ==========================================
+// Start Server
+// ==========================================
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`🚀 Masar Server running on port ${PORT}`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
