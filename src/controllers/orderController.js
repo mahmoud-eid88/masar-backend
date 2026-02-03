@@ -27,8 +27,10 @@ exports.createOrder = async (req, res) => {
             courier_id: courier_id || null, // Allow specific assignment
             pickup_latitude: pickup_location.lat,
             pickup_longitude: pickup_location.lng,
+            pickup_address: pickup_location.address || null,
             dropoff_latitude: dropoff_location.lat,
             dropoff_longitude: dropoff_location.lng,
+            delivery_address: dropoff_location.address || null,
             destinations: destinations || null, // Store multi-stop details
             details,
             price,

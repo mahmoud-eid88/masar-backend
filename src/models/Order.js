@@ -22,6 +22,10 @@ const Order = sequelize.define('Order', {
         type: DataTypes.FLOAT,
         allowNull: false
     },
+    pickup_address: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
     dropoff_latitude: {
         type: DataTypes.FLOAT,
         allowNull: false
@@ -29,6 +33,10 @@ const Order = sequelize.define('Order', {
     dropoff_longitude: {
         type: DataTypes.FLOAT,
         allowNull: false
+    },
+    delivery_address: {
+        type: DataTypes.STRING,
+        allowNull: true
     },
     details: {
         type: DataTypes.TEXT
