@@ -1,4 +1,31 @@
 const { Order, Customer, Courier, Wallet, Transaction, Rating, NegotiationLog } = require('../models');
+const pricingService = require('../services/pricingService');
+
+exports.estimatePrice = async (req, res) => {
+    try {
+        const { pickupLat, pickupLng, dropoffLat, dropoffLng } = req.query;
+
+        // Validate
+        if (!pickupLat || !pickupLng || !dropoffLat || !dropoffLng) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing location coordinates'
+            });
+        }
+
+        const options = pricingService.calculatePriceOptions(
+            parseFloat(pickupLat),
+            parseFloat(pickupLng),
+            parseFloat(dropoffLat),
+            parseFloat(dropoffLng)
+        );
+
+        res.json({ success: true, ...options });
+    } catch (error) {
+        console.error('Estimate Price Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
 
 exports.createOrder = async (req, res) => {
     try {
@@ -27,13 +54,17 @@ exports.createOrder = async (req, res) => {
             courier_id: courier_id || null, // Allow specific assignment
             pickup_latitude: pickup_location.lat,
             pickup_longitude: pickup_location.lng,
-            pickup_address: pickup_location.address || null,
+            pickup_address: req.body.pickup_address || null,
             dropoff_latitude: dropoff_location.lat,
             dropoff_longitude: dropoff_location.lng,
-            delivery_address: dropoff_location.address || null,
+            delivery_address: req.body.delivery_address || null,
             destinations: destinations || null, // Store multi-stop details
             details,
             price,
+            order_type: req.body.order_type || 'parcel',
+            service_tier: req.body.tier_id || 'standard',
+            priority: req.body.tier_id === 'fast' ? 3 : (req.body.tier_id === 'economic' ? 1 : 2),
+            verification_code: Math.floor(1000 + Math.random() * 9000).toString(),
             status: 'waiting' // Always waiting initially, even if specific courier (courier must accept)
         });
 
@@ -83,15 +114,35 @@ exports.acceptOrder = async (req, res) => {
 exports.updateOrderStatus = async (req, res) => {
     try {
         const { order_id } = req.params;
-        const { status } = req.body;
+        const { status, verification_code, proof } = req.body;
 
         const order = await Order.findByPk(order_id);
         if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
 
+        // Verification check for delivered status
+        if (status === 'delivered') {
+            if (!verification_code || verification_code !== order.verification_code) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'كود التحقق غير صحيح. يرجى إدخال الكود الصحيح من العميل.'
+                });
+            }
+        }
+
         await Order.sequelize.transaction(async (t) => {
-            await order.update({ status }, { transaction: t });
+            const updateData = { status };
+            if (status === 'picked_up' && proof) updateData.pickup_proof = proof;
+            if (status === 'delivered' && proof) updateData.delivery_proof = proof;
+
+            await order.update(updateData, { transaction: t });
 
             if (status === 'delivered' && order.courier_id) {
+                // Commission logic: Platform takes 10%
+                const commissionRate = 0.10;
+                const totalPrice = parseFloat(order.price);
+                const commission = totalPrice * commissionRate;
+                const netEarning = totalPrice - commission;
+
                 // Credit Courier Wallet
                 let wallet = await Wallet.findOne({
                     where: { user_id: order.courier_id, role: 'courier' },
@@ -106,14 +157,15 @@ exports.updateOrderStatus = async (req, res) => {
                     }, { transaction: t });
                 }
 
-                wallet.balance = parseFloat(wallet.balance) + parseFloat(order.price);
+                wallet.balance = parseFloat(wallet.balance) + netEarning;
                 await wallet.save({ transaction: t });
 
+                // Create Transaction record for Courier
                 await Transaction.create({
                     wallet_id: wallet.id,
-                    amount: order.price,
+                    amount: netEarning,
                     type: 'credit',
-                    description: `Delivery earning for order #${order.id}`,
+                    description: `صافي ربح الرحلة #${order.id} (بعد خصم عمولة ${commission.toFixed(2)} ج.م)`,
                     order_id: order.id
                 }, { transaction: t });
             }
@@ -169,7 +221,15 @@ exports.getNearbyOrders = async (req, res) => {
                     ...order.toJSON(),
                     distance: parseFloat(distance.toFixed(2))
                 };
-            }).sort((a, b) => a.distance - b.distance);
+            }).sort((a, b) => {
+                // Primary Sort: Priority (DESC)
+                const priorityA = a.priority || 2;
+                const priorityB = b.priority || 2;
+                if (priorityA !== priorityB) return priorityB - priorityA;
+
+                // Secondary Sort: Distance (ASC)
+                return a.distance - b.distance;
+            });
         }
 
         res.json({ success: true, orders: sortedOrders });
@@ -242,8 +302,8 @@ exports.getOrderDetails = async (req, res) => {
         const { order_id } = req.params;
         const order = await Order.findByPk(order_id, {
             include: [
-                { model: Customer, attributes: ['name', 'phone'] },
-                { model: Courier, attributes: ['name', 'phone', 'latitude', 'longitude'] }
+                { model: Customer, attributes: ['id', 'name', 'phone'] },
+                { model: Courier, attributes: ['id', 'name', 'phone', 'vehicle_type', 'vehicle_plate', 'rating'] }
             ]
         });
 

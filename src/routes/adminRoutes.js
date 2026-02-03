@@ -19,4 +19,9 @@ router.get('/orders/recent', adminController.getRecentOrders);
 router.get('/verifications', authenticateToken, adminController.getVerifications);
 router.post('/verifications/review', authenticateToken, adminController.reviewVerification);
 
+// Financial Management
+const walletController = require('../controllers/walletController');
+router.get('/finance/transactions', authenticateToken, walletController.getAllTransactions);
+router.post('/finance/withdrawals/review', authenticateToken, walletController.reviewWithdrawal);
+
 module.exports = router;

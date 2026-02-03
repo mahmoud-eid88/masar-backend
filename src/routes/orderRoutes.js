@@ -14,9 +14,12 @@ const {
     getCourierOrderHistory,
     checkOrderRating,
     proposePrice,
-    respondToProposal
+    proposePrice,
+    respondToProposal,
+    estimatePrice
 } = require('../controllers/orderController');
 
+router.get('/estimate', estimatePrice); // [NEW] Smart Pricing Endpoint
 router.post('/', createOrder);
 router.post('/create', createOrder); // 🩹 FIX: Alias for mobile app
 router.post('/:order_id/accept', acceptOrder);

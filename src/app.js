@@ -55,7 +55,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Request Logging (Use 'tiny' or 'combined' in production for less noise)
-app.use(morgan('dev'));
+app.use(morgan('tiny'));
 
 // ==========================================
 // API Routes

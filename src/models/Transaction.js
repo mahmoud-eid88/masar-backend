@@ -26,6 +26,10 @@ const Transaction = sequelize.define('Transaction', {
     order_id: {
         type: DataTypes.INTEGER,
         allowNull: true
+    },
+    status: {
+        type: DataTypes.ENUM('pending', 'completed', 'rejected'),
+        defaultValue: 'completed'
     }
 }, {
     tableName: 'transactions',

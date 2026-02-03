@@ -159,24 +159,16 @@ exports.changePassword = async (req, res) => {
 
 exports.submitVerification = async (req, res) => {
     try {
-        console.log('--- Submit Verification Request (Multipart) Started ---');
-        console.log('User ID:', req.user.id);
-        console.log('User Role:', req.user.role);
-
         const userId = req.user.id;
         const role = req.user.role;
         const { full_name_arabic, identity_number } = req.body;
         const files = req.files || {};
-
-        console.log('Body:', req.body);
-        console.log('Files received:', Object.keys(files));
 
         const idCardFrontFile = files['id_card_front'] ? files['id_card_front'][0] : null;
         const idCardBackFile = files['id_card_back'] ? files['id_card_back'][0] : null;
         const selfieImageFile = files['selfie_image'] ? files['selfie_image'][0] : null;
 
         if (!full_name_arabic || !identity_number || !idCardFrontFile || !idCardBackFile || !selfieImageFile) {
-            console.log('Validation Failed: Missing fields or files');
             return res.status(400).json({ success: false, message: 'جميع البيانات والصور مطلوبة للتوثيق' });
         }
 
@@ -212,7 +204,6 @@ exports.submitVerification = async (req, res) => {
         user.verification_refusal_reason = null;
 
         await user.save();
-        console.log('User verification data saved.');
 
         // Create Security Log
         try {
@@ -262,24 +253,7 @@ exports.getSecurityLogs = async (req, res) => {
 // NEW: Submit verification via JSON (base64 images in body)
 exports.submitVerificationJSON = async (req, res) => {
     try {
-        console.log('--- Submit Verification Request (JSON) Started ---');
-        console.log('User ID:', req.user.id);
-        console.log('User Role:', req.user.role);
-
-        const userId = req.user.id;
-        const role = req.user.role;
-        const { full_name_arabic, identity_number, id_card_front, id_card_back, selfie_image } = req.body;
-
-        console.log('Received fields:', {
-            full_name_arabic: !!full_name_arabic,
-            identity_number: !!identity_number,
-            id_card_front: id_card_front ? `${id_card_front.substring(0, 50)}...` : null,
-            id_card_back: id_card_back ? `${id_card_back.substring(0, 50)}...` : null,
-            selfie_image: selfie_image ? `${selfie_image.substring(0, 50)}...` : null
-        });
-
         if (!full_name_arabic || !identity_number || !id_card_front || !id_card_back || !selfie_image) {
-            console.log('Validation Failed: Missing fields');
             return res.status(400).json({ success: false, message: 'جميع البيانات والصور مطلوبة للتوثيق' });
         }
 
@@ -304,7 +278,6 @@ exports.submitVerificationJSON = async (req, res) => {
         user.verification_refusal_reason = null;
 
         await user.save();
-        console.log('User verification data saved (JSON method).');
 
         // Create Security Log
         try {

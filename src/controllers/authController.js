@@ -83,7 +83,6 @@ exports.loginCustomer = async (req, res) => {
                 user: { id: customer.id, name: customer.name, email: customer.email, role: 'customer' }
             });
         } else {
-            console.log('Login failed: Invalid credentials');
             if (!customer && !admin) {
                 res.status(400).json({ success: false, message: 'الحساب غير موجود' });
             } else {

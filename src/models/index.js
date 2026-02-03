@@ -28,5 +28,14 @@ const db = {
     NegotiationLog
 };
 
+// Associations
+Wallet.hasMany(Transaction, { foreignKey: 'wallet_id' });
+Transaction.belongsTo(Wallet, { foreignKey: 'wallet_id' });
+
+Customer.hasOne(Wallet, { foreignKey: 'user_id', constraints: false, scope: { role: 'customer' } });
+Courier.hasOne(Wallet, { foreignKey: 'user_id', constraints: false, scope: { role: 'courier' } });
+Wallet.belongsTo(Customer, { foreignKey: 'user_id', constraints: false });
+Wallet.belongsTo(Courier, { foreignKey: 'user_id', constraints: false });
+
 module.exports = db;
 

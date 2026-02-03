@@ -64,6 +64,30 @@ const Order = sequelize.define('Order', {
     accepted_at: {
         type: DataTypes.DATE,
         allowNull: true
+    },
+    pickup_proof: {
+        type: DataTypes.JSON,
+        allowNull: true
+    },
+    delivery_proof: {
+        type: DataTypes.JSON,
+        allowNull: true
+    },
+    verification_code: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    order_type: {
+        type: DataTypes.STRING,
+        defaultValue: 'parcel'
+    },
+    service_tier: {
+        type: DataTypes.ENUM('economic', 'standard', 'fast'),
+        defaultValue: 'standard'
+    },
+    priority: {
+        type: DataTypes.INTEGER, // 1: Human, 2: Standard, 3: High
+        defaultValue: 2
     }
 }, {
     tableName: 'orders',
