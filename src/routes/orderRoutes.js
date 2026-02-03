@@ -14,7 +14,6 @@ const {
     getCourierOrderHistory,
     checkOrderRating,
     proposePrice,
-    proposePrice,
     respondToProposal,
     estimatePrice
 } = require('../controllers/orderController');
