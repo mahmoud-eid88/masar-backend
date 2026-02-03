@@ -97,6 +97,19 @@ const Courier = sequelize.define('Courier', {
     last_seen_at: {
         type: DataTypes.DATE,
         allowNull: true
+    },
+    referral_code: {
+        type: DataTypes.STRING,
+        unique: true,
+        allowNull: true
+    },
+    referred_by_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
+    fcm_token: {
+        type: DataTypes.STRING,
+        allowNull: true
     }
 }, {
     tableName: 'couriers',

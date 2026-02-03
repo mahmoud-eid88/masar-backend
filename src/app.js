@@ -17,6 +17,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const profileRoutes = require('./routes/profileRoutes');
 const courierRoutes = require('./routes/courierRoutes');
 const supportRoutes = require('./routes/supportRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 const app = express();
 
@@ -72,6 +73,7 @@ app.use(`${API_PREFIX}/admin`, adminRoutes);
 app.use(`${API_PREFIX}/profile`, profileRoutes);
 app.use(`${API_PREFIX}/couriers`, courierRoutes);
 app.use(`${API_PREFIX}/support`, supportRoutes);
+app.use(`${API_PREFIX}/notifications`, notificationRoutes);
 
 // Health Check Route (for Railway/AWS lb)
 app.get('/', (req, res) => {

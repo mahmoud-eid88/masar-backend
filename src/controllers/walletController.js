@@ -1,4 +1,5 @@
-const { Wallet, Transaction } = require('../models');
+const { Wallet, Transaction, Notification } = require('../models');
+const { Op } = require('sequelize');
 
 exports.getWallet = async (req, res) => {
     try {
@@ -56,13 +57,75 @@ exports.addFunds = async (req, res) => {
 
 exports.getAllTransactions = async (req, res) => {
     try {
+        const { Wallet, Courier, Customer } = require('../models');
         const transactions = await Transaction.findAll({
             order: [['createdAt', 'DESC']],
-            include: [{ model: Wallet }] // Assuming association exists
+            include: [{
+                model: Wallet,
+                include: [
+                    { model: Courier, attributes: ['name'] },
+                    { model: Customer, attributes: ['name'] }
+                ]
+            }]
         });
         res.json({ success: true, transactions });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
+    }
+};
+
+exports.getEarningsSummary = async (req, res) => {
+    try {
+        const { wallet_id } = req.params;
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        // Fix Sunday = 0 logic for startOfWeek
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+        const startOfWeek = new Date(now.setDate(diff));
+        startOfWeek.setHours(0, 0, 0, 0);
+
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        const daily = await Transaction.sum('amount', {
+            where: {
+                wallet_id,
+                type: 'credit',
+                status: 'completed',
+                createdAt: { [Op.gte]: startOfDay }
+            }
+        }) || 0;
+
+        const weekly = await Transaction.sum('amount', {
+            where: {
+                wallet_id,
+                type: 'credit',
+                status: 'completed',
+                createdAt: { [Op.gte]: startOfWeek }
+            }
+        }) || 0;
+
+        const monthly = await Transaction.sum('amount', {
+            where: {
+                wallet_id,
+                type: 'credit',
+                status: 'completed',
+                createdAt: { [Op.gte]: startOfMonth }
+            }
+        }) || 0;
+
+        res.json({
+            success: true,
+            summary: {
+                daily: parseFloat(daily).toFixed(2),
+                weekly: parseFloat(weekly).toFixed(2),
+                monthly: parseFloat(monthly).toFixed(2)
+            }
+        });
+    } catch (error) {
+        console.error('Get Earnings Summary Error:', error);
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
@@ -122,6 +185,28 @@ exports.reviewWithdrawal = async (req, res) => {
                 transaction.status = 'rejected';
             }
             await transaction.save({ transaction: t });
+
+            // Create persistent notification for user
+            const wallet = await Wallet.findByPk(transaction.wallet_id);
+            await Notification.create({
+                user_id: wallet.user_id,
+                role: wallet.role,
+                type: status === 'approved' ? 'WITHDRAWAL_APPROVED' : 'WITHDRAWAL_REJECTED',
+                title: status === 'approved' ? 'تمت الموافقة على سحب الرصيد' : 'تم رفض طلب سحب الرصيد',
+                message: status === 'approved'
+                    ? `تم تحويل مبلغ ${transaction.amount} جنيه إلى حسابك بنجاح.`
+                    : `نعتذر، تم رفض طلب سحب مبلغ ${transaction.amount} جنيه.`,
+                data: { transaction_id: transaction.id }
+            }, { transaction: t });
+        });
+
+        // Notify user via socket
+        const wallet = await Wallet.findByPk(transaction.wallet_id);
+        const io = req.app.get('io');
+        // Join specific user room logic if exists, or global notification
+        io.to(`user_${wallet.user_id}`).emit('wallet_updated', {
+            message: status === 'approved' ? 'تمت الموافقة على سحب الرصيد' : 'تم رفض طلب سحب الرصيد',
+            status
         });
 
         res.json({ success: true, message: `Withdrawal ${status}` });

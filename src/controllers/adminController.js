@@ -90,6 +90,65 @@ exports.getDashboardStats = async (req, res) => {
     }
 };
 
+// Helper to emit stats to socket
+exports.emitDashboardStats = async (io) => {
+    try {
+        const { Order, Courier, Customer, Admin } = require('../models');
+        const { Op } = require('sequelize');
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        const totalOrders = await Order.count();
+        const todayOrders = await Order.count({
+            where: { createdAt: { [Op.gte]: today, [Op.lt]: tomorrow } }
+        });
+
+        const totalCustomers = await Customer.count();
+        const totalCouriers = await Courier.count();
+        const activeCouriers = await Courier.count({ where: { availability: true } });
+
+        const pendingOrders = await Order.count({ where: { status: 'waiting' } });
+        const activeOrders = await Order.count({
+            where: { status: { [Op.in]: ['accepted', 'picked_up', 'in_delivery'] } }
+        });
+        const deliveredOrders = await Order.count({ where: { status: 'delivered' } });
+
+        const totalRevenue = await Order.sum('price', { where: { status: 'delivered' } }) || 0;
+        const todayRevenue = await Order.sum('price', {
+            where: {
+                status: 'delivered',
+                updatedAt: { [Op.gte]: today, [Op.lt]: tomorrow }
+            }
+        }) || 0;
+
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+        const monthlyOrders = await Order.count({
+            where: { createdAt: { [Op.gte]: monthStart, [Op.lt]: monthEnd } }
+        });
+
+        io.to('admin_room').emit('dashboard_stats_updated', {
+            totalOrders,
+            todayOrders,
+            monthlyOrders,
+            totalCustomers,
+            totalCouriers,
+            activeCouriers,
+            pendingOrders,
+            activeOrders,
+            deliveredOrders,
+            totalStaff: await Admin.count(),
+            totalRevenue: parseFloat(totalRevenue).toFixed(2),
+            todayRevenue: parseFloat(todayRevenue).toFixed(2)
+        });
+    } catch (error) {
+        console.error('Emit Dashboard Stats Error:', error);
+    }
+};
+
 exports.getAllUsers = async (req, res) => {
     try {
         const { type, search } = req.query;

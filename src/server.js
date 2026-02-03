@@ -29,6 +29,36 @@ io.on('connection', (socket) => {
         console.log(`👤 Socket ${socket.id} joined room: ${roomName}`);
     });
 
+    // Join admin room for stats updates
+    socket.on('join_admin_room', () => {
+        socket.join('admin_room');
+        console.log(`📡 Admin joined room: admin_room`);
+    });
+
+    // Join individual user room for wallet/status updates
+    socket.on('join_user_room', (userId) => {
+        const roomName = `user_${userId}`;
+        socket.join(roomName);
+        console.log(`👤 User ${userId} joined room: ${roomName}`);
+    });
+
+    // Support Chat Rooms
+    socket.on('join_support_room', (userId) => {
+        socket.join(`support_${userId}`);
+        console.log(`💬 User join support room: support_${userId}`);
+    });
+
+    socket.on('join_support_agents', () => {
+        socket.join('support_agents');
+        console.log(`🎧 Support agent joined agents room`);
+    });
+
+    socket.on('support_typing', (data) => {
+        const { userId, isTyping, senderRole } = data;
+        // Broadcast to the other party in the support room
+        socket.to(`support_${userId}`).emit('support_typing', { userId, isTyping, senderRole });
+    });
+
     // Real-time Courier Location Updates
     socket.on('update_location', async (data) => {
         const { courier_id, location } = data;

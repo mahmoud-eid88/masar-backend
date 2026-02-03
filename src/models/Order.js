@@ -88,6 +88,18 @@ const Order = sequelize.define('Order', {
     priority: {
         type: DataTypes.INTEGER, // 1: Human, 2: Standard, 3: High
         defaultValue: 2
+    },
+    scheduled_at: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
+    promo_code_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
+    current_destination_index: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0 // Index of the destination in the 'destinations' array being delivered to
     }
 }, {
     tableName: 'orders',

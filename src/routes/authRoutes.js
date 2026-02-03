@@ -6,11 +6,13 @@ const {
     registerCourier,
     loginCourier,
     register,
-    login
+    login,
+    getReferralStats
 } = require('../controllers/authController');
 
 router.post('/register', register);
 router.post('/login', login);
+router.get('/referral-stats', getReferralStats);
 router.post('/switch-role', require('../controllers/authController').switchRole);
 router.post('/customer/register', registerCustomer);
 router.post('/customer/login', loginCustomer);

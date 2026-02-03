@@ -15,10 +15,14 @@ const {
     checkOrderRating,
     proposePrice,
     respondToProposal,
-    estimatePrice
+    estimatePrice,
+    validatePromo,
+    updateDestinationProgress
 } = require('../controllers/orderController');
 
 router.get('/estimate', estimatePrice); // [NEW] Smart Pricing Endpoint
+router.post('/validate-promo', validatePromo); // [NEW] Promo Validation Endpoint
+router.patch('/:order_id/destination-progress', updateDestinationProgress); // [NEW] Multi-stop progress
 router.post('/', createOrder);
 router.post('/create', createOrder); // 🩹 FIX: Alias for mobile app
 router.post('/:order_id/accept', acceptOrder);

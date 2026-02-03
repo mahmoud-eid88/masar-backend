@@ -93,6 +93,19 @@ const Customer = sequelize.define('Customer', {
     support_notes: {
         type: DataTypes.TEXT,
         allowNull: true
+    },
+    referral_code: {
+        type: DataTypes.STRING,
+        unique: true,
+        allowNull: true
+    },
+    referred_by_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
+    fcm_token: {
+        type: DataTypes.STRING,
+        allowNull: true
     }
 }, {
     tableName: 'customers',

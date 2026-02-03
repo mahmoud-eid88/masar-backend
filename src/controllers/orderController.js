@@ -1,9 +1,12 @@
-const { Order, Customer, Courier, Wallet, Transaction, Rating, NegotiationLog } = require('../models');
+const { Order, Customer, Courier, Wallet, Transaction, Rating, Notification, NegotiationLog, OrderMessage } = require('../models');
 const pricingService = require('../services/pricingService');
+const referralService = require('../services/referralService');
+const pushService = require('../services/notificationService');
+const adminController = require('./adminController');
 
 exports.estimatePrice = async (req, res) => {
     try {
-        const { pickupLat, pickupLng, dropoffLat, dropoffLng } = req.query;
+        const { pickupLat, pickupLng, dropoffLat, dropoffLng, destinations, promoCode } = req.query;
 
         // Validate
         if (!pickupLat || !pickupLng || !dropoffLat || !dropoffLng) {
@@ -13,23 +16,85 @@ exports.estimatePrice = async (req, res) => {
             });
         }
 
+        let parsedDestinations = [];
+        if (destinations) {
+            parsedDestinations = typeof destinations === 'string' ? JSON.parse(destinations) : destinations;
+        }
+
         const options = pricingService.calculatePriceOptions(
             parseFloat(pickupLat),
             parseFloat(pickupLng),
             parseFloat(dropoffLat),
-            parseFloat(dropoffLng)
+            parseFloat(dropoffLng),
+            parsedDestinations
         );
 
-        res.json({ success: true, ...options });
+        // If promo code provided, validate it
+        let promoResults = null;
+        if (promoCode) {
+            const basePrice = options.tiers.find(t => t.id === 'standard').price;
+            promoResults = await pricingService.validatePromo(promoCode, basePrice);
+            if (promoResults.valid) {
+                // Apply discount to all tiers
+                options.tiers = options.tiers.map(t => ({
+                    ...t,
+                    original_price: t.price,
+                    price: Math.max(0, t.price - promoResults.discount)
+                }));
+            }
+        }
+
+        res.json({
+            success: true,
+            ...options,
+            promo: promoResults
+        });
     } catch (error) {
         console.error('Estimate Price Error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 };
 
+exports.validatePromo = async (req, res) => {
+    try {
+        const { code, amount } = req.body;
+        const result = await pricingService.validatePromo(code, parseFloat(amount));
+        res.json({ success: true, ...result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
 exports.createOrder = async (req, res) => {
     try {
-        const { customer_id, pickup_location, dropoff_location, destinations, details, price, courier_id } = req.body;
+        const {
+            customer_id,
+            pickup_location,
+            dropoff_location,
+            destinations,
+            details,
+            price,
+            courier_id,
+            order_type,
+            promoCode
+        } = req.body;
+
+        // 1. Determine promo discount if applicable
+        let discount = 0;
+        let promo_id = null;
+        if (promoCode) {
+            const promoResult = await pricingService.validatePromo(promoCode, parseFloat(price));
+            if (promoResult.valid) {
+                discount = promoResult.discount;
+                promo_id = promoResult.promo_id;
+
+                // Increment promo usage
+                const { PromoCode } = require('../models');
+                await PromoCode.increment('used_count', { where: { id: promo_id } });
+            }
+        }
+
+        const finalPrice = Math.max(0, parseFloat(price) - discount);
 
         // pickup_location and dropoff_location should be { lat, lng } or similar
         // For Sequelize GEOMETRY, we need { type: 'Point', coordinates: [lng, lat] }
@@ -60,21 +125,89 @@ exports.createOrder = async (req, res) => {
             delivery_address: req.body.delivery_address || null,
             destinations: destinations || null, // Store multi-stop details
             details,
-            price,
+            price: finalPrice,
             order_type: req.body.order_type || 'parcel',
             service_tier: req.body.tier_id || 'standard',
             priority: req.body.tier_id === 'fast' ? 3 : (req.body.tier_id === 'economic' ? 1 : 2),
+            scheduled_at: req.body.scheduled_at || null,
+            promo_code_id: promo_id,
+            current_destination_index: 0,
             verification_code: Math.floor(1000 + Math.random() * 9000).toString(),
             status: 'waiting' // Always waiting initially, even if specific courier (courier must accept)
         });
 
         // Notify nearby couriers via Socket.io
         const io = req.app.get('io');
+
+        // Find couriers within 10km radius
+        const availableCouriers = await Courier.findAll({
+            where: { availability: true, is_blocked: false }
+        });
+
+        const nearbyCouriers = availableCouriers.filter(c => {
+            if (!c.latitude || !c.longitude) return false;
+            const dist = calculateDistance(
+                parseFloat(pickup_location.lat),
+                parseFloat(pickup_location.lng),
+                parseFloat(c.latitude),
+                parseFloat(c.longitude)
+            );
+            return dist <= 10; // 10km radius
+        });
+
+        if (nearbyCouriers.length > 0) {
+            nearbyCouriers.forEach(c => {
+                io.to(`user_${c.id} `).emit('new_order_nearby', order);
+            });
+        }
+
+        // Always emit to general room for fallback/dashboard
         io.emit('new_order', order);
+
+        // Update admin stats
+        adminController.emitDashboardStats(io);
 
         res.status(201).json({ success: true, order_id: order.id });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
+    }
+};
+
+exports.updateDestinationProgress = async (req, res) => {
+    try {
+        const { order_id } = req.params;
+        const order = await Order.findByPk(order_id);
+
+        if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+
+        const destinations = order.destinations || [];
+        if (order.current_destination_index < destinations.length - 1) {
+            order.current_destination_index += 1;
+            await order.save();
+
+            // Notify customer
+            const io = req.app.get('socketio');
+            if (io) {
+                io.to(order.id.toString()).emit('destination_reached', {
+                    index: order.current_destination_index - 1,
+                    next_index: order.current_destination_index
+                });
+            }
+
+            return res.json({
+                success: true,
+                message: 'تم تحديث الوجهة الحالية',
+                current_index: order.current_destination_index
+            });
+        } else {
+            return res.json({
+                success: true,
+                message: 'وصلت إلى الوجهة الأخيرة',
+                finished: true
+            });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
 };
 
@@ -101,9 +234,22 @@ exports.acceptOrder = async (req, res) => {
 
         await order.update({ courier_id, status: 'accepted' });
 
-        // Notify customer
+        // Create notification for customer
+        await Notification.create({
+            user_id: order.customer_id,
+            role: 'customer',
+            type: 'ORDER_ACCEPTED',
+            title: 'تم قبول طلبك',
+            message: `المندوب وافق على طلبك وهو الآن في الطريق إليك`,
+            data: { order_id }
+        });
+
+        // Notify customer via socket
         const io = req.app.get('io');
-        io.to(`order_${order.id}`).emit('order_status_updated', { order_id, status: 'accepted' });
+        io.to(`order_${order.id} `).emit('order_status_updated', { order_id, status: 'accepted' });
+
+        // Update admin stats
+        adminController.emitDashboardStats(io);
 
         res.json({ success: true, message: 'Order accepted' });
     } catch (error) {
@@ -135,6 +281,54 @@ exports.updateOrderStatus = async (req, res) => {
             if (status === 'delivered' && proof) updateData.delivery_proof = proof;
 
             await order.update(updateData, { transaction: t });
+
+            // Create notification for customer
+            let notificationTitle = '';
+            let notificationMessage = '';
+
+            if (status === 'picked_up') {
+                notificationTitle = 'تم استلام الشحنة';
+                notificationMessage = 'المندوب استلم الشحنة بنجاح من الموقع';
+            } else if (status === 'in_delivery') {
+                notificationTitle = 'الشحنة في الطريق';
+                notificationMessage = 'المندوب في طريقه الآن لتسليم الشحنة';
+            } else if (status === 'delivered') {
+                notificationTitle = 'تم التوصيل بنجاح';
+                notificationMessage = 'تم توصيل طلبك بنجاح. شكراً لاستخدامك مسار!';
+
+                // Referral Reward: Check if this is the customer's first completed order
+                const completedCount = await Order.count({
+                    where: {
+                        customer_id: order.customer_id,
+                        status: 'delivered',
+                        id: { [Op.ne]: order.id } // Exclude current order
+                    },
+                    transaction: t
+                });
+                if (completedCount === 0) {
+                    await referralService.processReferralReward(order.customer_id, 'customer');
+                }
+            }
+
+            if (notificationTitle) {
+                await Notification.create({
+                    user_id: order.customer_id,
+                    role: 'customer',
+                    type: `ORDER_${status.toUpperCase()} `,
+                    title: notificationTitle,
+                    message: notificationMessage,
+                    data: { order_id }
+                }, { transaction: t });
+
+                // Send Push Notification
+                pushService.sendPushNotification(
+                    order.customer_id,
+                    'customer',
+                    notificationTitle,
+                    notificationMessage,
+                    { order_id: order.id.toString(), status }
+                ).catch(err => console.error('Push Error:', err));
+            }
 
             if (status === 'delivered' && order.courier_id) {
                 // Commission logic: Platform takes 10%
@@ -171,11 +365,23 @@ exports.updateOrderStatus = async (req, res) => {
             }
         });
 
-        // Notify customer
         const io = req.app.get('io');
-        io.to(`order_${order.id}`).emit('order_status_updated', { order_id, status });
 
-        res.json({ success: true, message: `Status updated to ${status}` });
+        // Notify courier about wallet update if delivered
+        if (status === 'delivered' && order.courier_id) {
+            io.to(`user_${order.courier_id} `).emit('wallet_updated', {
+                message: 'تم إضافة أرباح الرحلة إلى محفظتك',
+                type: 'credit'
+            });
+        }
+
+        // Notify customer
+        io.to(`order_${order.id} `).emit('order_status_updated', { order_id, status });
+
+        // Update admin stats
+        adminController.emitDashboardStats(io);
+
+        res.json({ success: true, message: `Order status updated to ${status} ` });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
     }
@@ -183,7 +389,8 @@ exports.updateOrderStatus = async (req, res) => {
 
 exports.getNearbyOrders = async (req, res) => {
     try {
-        const { lat, lng, courier_id } = req.query;
+        const { lat, lng, courier_id, radius } = req.query;
+        const maxRadius = parseFloat(radius) || 15; // Default 15km
 
         // Return waiting orders that are either:
         // 1. Broadcast (courier_id is null)
@@ -221,15 +428,16 @@ exports.getNearbyOrders = async (req, res) => {
                     ...order.toJSON(),
                     distance: parseFloat(distance.toFixed(2))
                 };
-            }).sort((a, b) => {
-                // Primary Sort: Priority (DESC)
-                const priorityA = a.priority || 2;
-                const priorityB = b.priority || 2;
-                if (priorityA !== priorityB) return priorityB - priorityA;
+            }).filter(order => order.distance <= maxRadius) // Filter by radius
+                .sort((a, b) => {
+                    // Primary Sort: Priority (DESC)
+                    const priorityA = a.priority || 2;
+                    const priorityB = b.priority || 2;
+                    if (priorityA !== priorityB) return priorityB - priorityA;
 
-                // Secondary Sort: Distance (ASC)
-                return a.distance - b.distance;
-            });
+                    // Secondary Sort: Distance (ASC)
+                    return a.distance - b.distance;
+                });
         }
 
         res.json({ success: true, orders: sortedOrders });
@@ -274,6 +482,12 @@ exports.getCustomerOrders = async (req, res) => {
         const { customer_id } = req.params;
         const orders = await Order.findAll({
             where: { customer_id },
+            include: [
+                {
+                    model: Courier,
+                    attributes: ['id', 'name', 'phone', 'latitude', 'longitude', 'rating']
+                }
+            ],
             order: [['createdAt', 'DESC']]
         });
         res.json({ success: true, orders });
@@ -521,7 +735,7 @@ exports.proposePrice = async (req, res) => {
 
         // Notify customer
         const io = req.app.get('io');
-        io.to(`order_${order.id}`).emit('price_proposal', {
+        io.to(`order_${order.id} `).emit('price_proposal', {
             order_id: order.id,
             price: price,
             courier_id: courier_id,
@@ -570,7 +784,7 @@ exports.respondToProposal = async (req, res) => {
                 order: order.toJSON()
             });
             // Also specific event
-            io.to(`order_${order.id}`).emit('proposal_response', {
+            io.to(`order_${order.id} `).emit('proposal_response', {
                 status: 'accepted',
                 order_id: order.id
             });
@@ -590,13 +804,13 @@ exports.respondToProposal = async (req, res) => {
             });
 
             const io = req.app.get('io');
-            io.to(`order_${order.id}`).emit('proposal_response', {
+            io.to(`order_${order.id} `).emit('proposal_response', {
                 status: 'rejected',
                 order_id: order.id
             });
         }
 
-        res.json({ success: true, message: `Term response: ${response}` });
+        res.json({ success: true, message: `Term response: ${response} ` });
     } catch (error) {
         console.error('Respond Proposal Error:', error);
         res.status(500).json({ success: false, error: error.message });

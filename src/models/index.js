@@ -11,6 +11,8 @@ const Rating = require('./Rating');
 const OrderMessage = require('./OrderMessage');
 const SupportTicket = require('./SupportTicket');
 const NegotiationLog = require('./NegotiationLog');
+const Notification = require('./Notification');
+const PromoCode = require('./PromoCode');
 
 const db = {
     sequelize,
@@ -25,7 +27,9 @@ const db = {
     Rating,
     OrderMessage,
     SupportTicket,
-    NegotiationLog
+    NegotiationLog,
+    Notification,
+    PromoCode
 };
 
 // Associations

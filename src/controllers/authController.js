@@ -2,6 +2,8 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { Op } = require('sequelize');
 const { Customer, Courier, Admin } = require('../models');
+const adminController = require('./adminController');
+const referralService = require('../services/referralService');
 
 const generateToken = (id, role) => {
     return jwt.sign({ id, role }, process.env.JWT_SECRET, {
@@ -11,7 +13,7 @@ const generateToken = (id, role) => {
 
 exports.registerCustomer = async (req, res) => {
     try {
-        const { name, email, password, phone } = req.body;
+        const { name, email, password, phone, referralCode } = req.body;
 
         if (!email || !password) {
             return res.status(400).json({ success: false, message: 'البريد الإلكتروني وكلمة المرور مطلوبين' });
@@ -31,17 +33,35 @@ exports.registerCustomer = async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        // Check referral
+        let referredBy = null;
+        if (referralCode) {
+            const referrer = await Customer.findOne({ where: { referral_code: referralCode } });
+            if (referrer) referredBy = referrer.id;
+        }
+
         const customer = await Customer.create({
             name: name || email.split('@')[0],
             email,
             password: hashedPassword,
-            phone: phone || null
+            phone: phone || null,
+            referral_code: referralService.generateReferralCode(),
+            referred_by_id: referredBy
         });
+
+        // Update admin stats
+        const io = req.app.get('io');
+        adminController.emitDashboardStats(io);
 
         res.status(201).json({
             success: true,
             token: generateToken(customer.id, 'customer'),
-            user: { id: customer.id, name: customer.name, email: customer.email }
+            user: {
+                id: customer.id,
+                name: customer.name,
+                email: customer.email,
+                referral_code: customer.referral_code
+            }
         });
     } catch (error) {
         console.error('Registration Error (Customer):', error);
@@ -80,7 +100,13 @@ exports.loginCustomer = async (req, res) => {
             res.json({
                 success: true,
                 token: generateToken(customer.id, 'customer'),
-                user: { id: customer.id, name: customer.name, email: customer.email, role: 'customer' }
+                user: {
+                    id: customer.id,
+                    name: customer.name,
+                    email: customer.email,
+                    role: 'customer',
+                    referral_code: customer.referral_code
+                }
             });
         } else {
             if (!customer && !admin) {
@@ -97,7 +123,7 @@ exports.loginCustomer = async (req, res) => {
 // Same for Courier...
 exports.registerCourier = async (req, res) => {
     try {
-        const { name, email, password, phone } = req.body;
+        const { name, email, password, phone, referralCode } = req.body;
         // Phone and name optional logic persists
 
         if (!email || !password) {
@@ -105,17 +131,35 @@ exports.registerCourier = async (req, res) => {
         }
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        // Check referral
+        let referredBy = null;
+        if (referralCode) {
+            const referrer = await Courier.findOne({ where: { referral_code: referralCode } });
+            if (referrer) referredBy = referrer.id;
+        }
+
         const courier = await Courier.create({
             name: name || email.split('@')[0],
             email,
             password: hashedPassword,
-            phone: phone || ''
+            phone: phone || '',
+            referral_code: referralService.generateReferralCode(),
+            referred_by_id: referredBy
         });
+
+        // Update admin stats
+        const io = req.app.get('io');
+        adminController.emitDashboardStats(io);
 
         res.status(201).json({
             success: true,
             token: generateToken(courier.id, 'courier'),
-            user: { id: courier.id, name: courier.name, email: courier.email }
+            user: {
+                id: courier.id,
+                name: courier.name,
+                email: courier.email,
+                referral_code: courier.referral_code
+            }
         });
     } catch (error) {
         console.error('Registration Error (Courier):', error);
@@ -143,7 +187,12 @@ exports.loginCourier = async (req, res) => {
             res.json({
                 success: true,
                 token: generateToken(courier.id, 'courier'),
-                user: { id: courier.id, name: courier.name, email: courier.email }
+                user: {
+                    id: courier.id,
+                    name: courier.name,
+                    email: courier.email,
+                    referral_code: courier.referral_code
+                }
             });
         } else {
             res.status(401).json({ success: false, message: 'Invalid credentials' });
@@ -167,6 +216,10 @@ exports.registerAdmin = async (req, res) => {
             email,
             password: hashedPassword
         });
+
+        // Update admin stats
+        const io = req.app.get('io');
+        adminController.emitDashboardStats(io);
 
         res.status(201).json({
             success: true,
@@ -269,10 +322,39 @@ exports.switchRole = async (req, res) => {
                 id: targetUser.id,
                 name: targetUser.name,
                 email: targetUser.email,
-                role: target_role
+                role: target_role,
+                referral_code: targetUser.referral_code
             }
         });
     } catch (error) {
         res.status(400).json({ success: false, error: error.message });
+    }
+};
+
+exports.getReferralStats = async (req, res) => {
+    try {
+        const { user_id, role } = req.query; // Or from auth middleware if added
+
+        let user;
+        let count = 0;
+
+        if (role === 'customer') {
+            user = await Customer.findByPk(user_id);
+            count = await Customer.count({ where: { referred_by_id: user_id } });
+        } else {
+            user = await Courier.findByPk(user_id);
+            count = await Courier.count({ where: { referred_by_id: user_id } });
+        }
+
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+        res.json({
+            success: true,
+            referral_code: user.referral_code,
+            referred_count: count,
+            reward_per_referral: 10.00
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
 };
