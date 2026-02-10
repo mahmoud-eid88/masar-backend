@@ -22,7 +22,7 @@ const validate = (schema) => (req, res, next) => {
 const schemas = {
     auth: {
         register: Joi.object({
-            phone: Joi.string().min(10).max(15).required(),
+            phone: Joi.string().min(10).max(15).optional(),
             password: Joi.string().min(6).required(),
             name: Joi.string().min(2).required(),
             role: Joi.string().valid('customer', 'courier').required(),
@@ -30,9 +30,10 @@ const schemas = {
             referred_by: Joi.string().optional(),
         }),
         login: Joi.object({
-            phone: Joi.string().required(),
+            email: Joi.string().optional(),
+            phone: Joi.string().optional(),
             password: Joi.string().required(),
-            role: Joi.string().valid('customer', 'courier').optional(),
+            role: Joi.string().valid('customer', 'courier', 'admin', 'support').optional(),
         }),
     },
     order: {
@@ -65,6 +66,8 @@ const schemas = {
         addFunds: Joi.object({
             wallet_id: Joi.number().integer().required(),
             amount: Joi.number().positive().required(),
+            payment_method: Joi.string().required(),
+            payment_details: Joi.object().required(),
             description: Joi.string().optional()
         }),
         withdraw: Joi.object({
