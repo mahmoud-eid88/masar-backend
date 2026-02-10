@@ -37,17 +37,21 @@ const app = express();
         console.log('✅ Database Synced Successfully.');
 
         // Seed min_app_version if not exists
-        const { SystemSetting } = require('./models');
-        const [setting] = await SystemSetting.findOrCreate({
-            where: { key: 'min_app_version' },
-            defaults: {
-                key: 'min_app_version',
-                value: '1.1.0',
-                type: 'string',
-                description: 'الحد الأدنى لإصدار التطبيق المسموح به'
-            }
-        });
-        console.log(`✅ Min App Version: ${setting.value}`);
+        try {
+            const { SystemSetting } = require('./models');
+            const [setting] = await SystemSetting.findOrCreate({
+                where: { key: 'min_app_version' },
+                defaults: {
+                    key: 'min_app_version',
+                    value: '1.1.0',
+                    type: 'string',
+                    description: 'الحد الأدنى لإصدار التطبيق المسموح به'
+                }
+            });
+            console.log(`✅ Min App Version: ${setting.value}`);
+        } catch (seedErr) {
+            console.error('⚠️ Version seed error (non-fatal):', seedErr.message);
+        }
     } catch (err) {
         console.error('❌ Database Connection Error:', err.message);
     }
@@ -159,7 +163,14 @@ app.get('/api/check-version', async (req, res) => {
             needs_update: needsUpdate
         });
     } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
+        // If DB fails, don't block users — return safe defaults
+        console.error('Version check DB error:', err.message);
+        res.json({
+            success: true,
+            min_version: '1.0.0',
+            current_version: req.query.version || 'unknown',
+            needs_update: false
+        });
     }
 });
 
