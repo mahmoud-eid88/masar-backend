@@ -32,7 +32,7 @@ const Transaction = sequelize.define('Transaction', {
         defaultValue: 'completed'
     },
     payment_method: {
-        type: DataTypes.ENUM('card', 'vodafone_cash', 'orange_cash', 'etisalat_cash', 'fawry', 'instapay', 'admin', 'order_earning'),
+        type: DataTypes.STRING,
         allowNull: true
     },
     payment_reference: {
