@@ -32,14 +32,24 @@ const app = express();
         await sequelize.authenticate();
         console.log('✅ Database Connection Established.');
 
-        // IN PRODUCTION: You might want to remove 'alter: true' and use migrations.
-        // For now, checks schema vs code and updates DB.
         console.log('🔄 Syncing Database Schema...');
         await sequelize.sync({ alter: true });
         console.log('✅ Database Synced Successfully.');
+
+        // Seed min_app_version if not exists
+        const { SystemSetting } = require('./models');
+        const [setting] = await SystemSetting.findOrCreate({
+            where: { key: 'min_app_version' },
+            defaults: {
+                key: 'min_app_version',
+                value: '1.1.0',
+                type: 'string',
+                description: 'الحد الأدنى لإصدار التطبيق المسموح به'
+            }
+        });
+        console.log(`✅ Min App Version: ${setting.value}`);
     } catch (err) {
         console.error('❌ Database Connection Error:', err.message);
-        // We don't exit the process so that the server can still respond to health checks
     }
 })();
 
@@ -83,6 +93,75 @@ const authLimiter = rateLimit({
 
 app.use('/api/', globalLimiter);
 app.use('/api/auth/', authLimiter);
+
+// ==========================================
+// Version Check Middleware
+// ==========================================
+app.use('/api/', async (req, res, next) => {
+    // Skip version check for the check-version endpoint itself and health check
+    if (req.path === '/check-version' || req.path === '/') {
+        return next();
+    }
+
+    const clientVersion = req.headers['x-app-version'];
+    if (!clientVersion) {
+        return next(); // Allow requests without version header (web dashboard, etc.)
+    }
+
+    try {
+        const { SystemSetting } = require('./models');
+        const setting = await SystemSetting.findOne({ where: { key: 'min_app_version' } });
+        if (setting) {
+            const minVersion = setting.value;
+            if (compareVersions(clientVersion, minVersion) < 0) {
+                return res.status(426).json({
+                    success: false,
+                    error: 'UPDATE_REQUIRED',
+                    message: 'يجب تحديث التطبيق للإصدار الأحدث للاستمرار',
+                    min_version: minVersion,
+                    current_version: clientVersion
+                });
+            }
+        }
+    } catch (err) {
+        console.error('Version check error:', err.message);
+        // Don't block on version check errors
+    }
+    next();
+});
+
+// Compare semantic versions: returns -1, 0, or 1
+function compareVersions(v1, v2) {
+    const parts1 = v1.split('.').map(Number);
+    const parts2 = v2.split('.').map(Number);
+    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+        const p1 = parts1[i] || 0;
+        const p2 = parts2[i] || 0;
+        if (p1 < p2) return -1;
+        if (p1 > p2) return 1;
+    }
+    return 0;
+}
+
+// Version Check Endpoint
+app.get('/api/check-version', async (req, res) => {
+    try {
+        const { SystemSetting } = require('./models');
+        const setting = await SystemSetting.findOne({ where: { key: 'min_app_version' } });
+        const minVersion = setting ? setting.value : '1.0.0';
+        const clientVersion = req.query.version || req.headers['x-app-version'];
+        const needsUpdate = clientVersion ? compareVersions(clientVersion, minVersion) < 0 : false;
+
+        res.json({
+            success: true,
+            min_version: minVersion,
+            current_version: clientVersion || 'unknown',
+            needs_update: needsUpdate
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
 
 // ==========================================
 // API Routes
