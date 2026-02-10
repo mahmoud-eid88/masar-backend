@@ -1,4 +1,5 @@
-const { Courier } = require('../models');
+const { Courier, Order, OrderTracking } = require('../models');
+const { Op } = require('sequelize');
 
 // Update courier location
 exports.updateLocation = async (req, res) => {
@@ -12,6 +13,24 @@ exports.updateLocation = async (req, res) => {
         }
 
         await courier.update({ latitude, longitude });
+
+        // Phase 8: Historical Route Tracking
+        // If courier is on an active order (accepted, picked_up, in_delivery), log the point
+        const activeOrder = await Order.findOne({
+            where: {
+                courier_id: courierId,
+                status: { [Op.in]: ['accepted', 'picked_up', 'in_delivery'] }
+            },
+            order: [['updatedAt', 'DESC']]
+        });
+
+        if (activeOrder) {
+            await OrderTracking.create({
+                order_id: activeOrder.id,
+                latitude,
+                longitude
+            });
+        }
 
         res.json({
             success: true,
@@ -218,3 +237,39 @@ exports.getProfile = async (req, res) => {
     }
 };
 
+// Get courier statistics (Earnings, Ratings, Trips)
+exports.getStats = async (req, res) => {
+    try {
+        const { courierId } = req.params;
+
+        const courier = await Courier.findByPk(courierId);
+        if (!courier) return res.status(404).json({ success: false, message: 'Courier not found' });
+
+        // Calculate total earnings from delivered orders
+        const completedOrders = await Order.findAll({
+            where: {
+                courier_id: courierId,
+                status: 'delivered'
+            },
+            attributes: ['price']
+        });
+
+        const totalEarnings = completedOrders.reduce((sum, order) => sum + (parseFloat(order.price) || 0), 0);
+        const completedTrips = completedOrders.length;
+
+        // Use stored rating or default to 5.0 if new
+        const rating = courier.rating || 5.0;
+
+        res.json({
+            success: true,
+            stats: {
+                total_earnings: totalEarnings,
+                completed_trips: completedTrips,
+                rating: rating
+            }
+        });
+    } catch (error) {
+        console.error('Get Stats Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};

@@ -60,6 +60,22 @@ const schemas = {
             pickup_address: Joi.string().optional(),
             delivery_address: Joi.string().optional(),
         }),
+    },
+    wallet: {
+        addFunds: Joi.object({
+            wallet_id: Joi.number().integer().required(),
+            amount: Joi.number().positive().required(),
+            description: Joi.string().optional()
+        }),
+        withdraw: Joi.object({
+            wallet_id: Joi.number().integer().required(),
+            amount: Joi.number().positive().required(),
+            description: Joi.string().optional()
+        }),
+        reviewWithdrawal: Joi.object({
+            transaction_id: Joi.number().integer().required(),
+            status: Joi.string().valid('approved', 'rejected').required()
+        })
     }
 };
 

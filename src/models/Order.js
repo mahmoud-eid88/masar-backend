@@ -104,6 +104,20 @@ const Order = sequelize.define('Order', {
 }, {
     tableName: 'orders',
     timestamps: true,
+    indexes: [
+        {
+            fields: ['status']
+        },
+        {
+            fields: ['customer_id']
+        },
+        {
+            fields: ['courier_id']
+        },
+        {
+            fields: ['created_at']
+        }
+    ],
     hooks: {
         afterCreate: async (order) => {
             // Generate unique order code: MSR-YYYYMMDD-XXXX

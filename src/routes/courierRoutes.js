@@ -7,6 +7,7 @@ router.patch('/:courierId/location', courierController.updateLocation);
 
 // Update courier availability (online/offline)
 router.patch('/:courierId/availability', courierController.updateAvailability);
+router.get('/:courierId/stats', courierController.getStats);
 
 // Get nearby couriers with distance
 router.get('/nearby', courierController.getNearbyCouriers);

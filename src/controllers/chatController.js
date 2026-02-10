@@ -104,6 +104,62 @@ exports.getOrderChatInfo = async (req, res) => {
     }
 };
 
+// NEW: Get unread message count for a specific order
+exports.getUnreadCount = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+        const { role } = req.query; // 'customer' or 'courier'
+
+        // Count messages from the OTHER party that are unread
+        const senderRole = role === 'customer' ? 'courier' : 'customer';
+
+        const count = await OrderMessage.count({
+            where: { order_id: orderId, sender_role: senderRole, is_read: false }
+        });
+
+        res.json({ success: true, unread: count });
+    } catch (error) {
+        console.error('Get Unread Count Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// NEW: Get unread counts for all active orders of a user
+exports.getUnreadCounts = async (req, res) => {
+    try {
+        const { userId, role } = req.query;
+        if (!userId || !role) {
+            return res.status(400).json({ success: false, message: 'userId and role required' });
+        }
+
+        const whereClause = role === 'customer'
+            ? { customer_id: userId, status: ['accepted', 'picked_up', 'in_delivery'] }
+            : { courier_id: userId, status: ['accepted', 'picked_up', 'in_delivery'] };
+
+        const activeOrders = await Order.findAll({
+            where: whereClause,
+            attributes: ['id'],
+        });
+
+        const senderRole = role === 'customer' ? 'courier' : 'customer';
+        const results = {};
+
+        for (const order of activeOrders) {
+            const count = await OrderMessage.count({
+                where: { order_id: order.id, sender_role: senderRole, is_read: false }
+            });
+            if (count > 0) {
+                results[order.id] = count;
+            }
+        }
+
+        res.json({ success: true, unread: results });
+    } catch (error) {
+        console.error('Get Unread Counts Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
 // NEW: Mark messages as read
 exports.markAsRead = async (req, res) => {
     try {

@@ -76,10 +76,11 @@ exports.loginCustomer = async (req, res) => {
         // FIRST: Check if this is an Admin login
         const admin = await Admin.findOne({ where: { email } });
         if (admin && (await bcrypt.compare(password, admin.password))) {
+            const actualRole = admin.role || 'admin';
             return res.json({
                 success: true,
-                token: generateToken(admin.id, 'admin'),
-                user: { id: admin.id, name: admin.name, email: admin.email, role: 'admin' }
+                token: generateToken(admin.id, actualRole),
+                user: { id: admin.id, name: admin.name, email: admin.email, role: actualRole }
             });
         }
 
@@ -245,10 +246,11 @@ exports.loginAdmin = async (req, res) => {
         });
 
         if (admin && (await bcrypt.compare(password, admin.password))) {
+            const actualRole = admin.role || 'admin';
             res.json({
                 success: true,
-                token: generateToken(admin.id, 'admin'),
-                user: { id: admin.id, name: admin.name, email: admin.email, role: 'admin' }
+                token: generateToken(admin.id, actualRole),
+                user: { id: admin.id, name: admin.name, email: admin.email, role: actualRole }
             });
         } else {
             res.status(401).json({ success: false, message: 'Invalid credentials' });

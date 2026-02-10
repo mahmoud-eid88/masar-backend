@@ -32,6 +32,27 @@ const SupportTicket = sequelize.define('SupportTicket', {
     user_id: {
         type: DataTypes.INTEGER,
         allowNull: false
+    },
+    // Assignment tracking
+    assigned_agent_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true // NULL = unassigned, in queue
+    },
+    assigned_agent_name: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    assigned_at: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
+    resolved_at: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
+    last_activity_at: {
+        type: DataTypes.DATE,
+        allowNull: true
     }
 }, {
     tableName: 'support_tickets',

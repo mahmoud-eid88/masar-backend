@@ -1,4 +1,4 @@
-const { Customer, Courier, Wallet, Transaction } = require('../models');
+const { Customer, Courier, Wallet, Transaction, SystemSetting } = require('../models');
 const crypto = require('crypto');
 
 exports.generateReferralCode = () => {
@@ -16,10 +16,9 @@ exports.processReferralReward = async (userId, role) => {
 
         if (!user || !user.referred_by_id) return;
 
-        // check if already rewarded (e.g. if this is the first order)
-        // For simplicity, we assume this is called only once when the first order is completed
-
-        const rewardAmount = 10.00; // 10 EGP reward
+        // Fetch dynamic reward amount
+        const rewardSetting = await SystemSetting.findOne({ where: { key: 'referral_reward_amount' } });
+        const rewardAmount = rewardSetting ? parseFloat(rewardSetting.value) : 10.00;
 
         // Find the referrer's wallet
         // Note: For now we assume referrer is the same role as the referee. 

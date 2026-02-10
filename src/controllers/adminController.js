@@ -1,5 +1,6 @@
-const { Order, Courier, Customer, Admin, Wallet, Transaction } = require('../models');
+const { Order, Courier, Customer, Admin, Wallet, Transaction, SystemSetting, Notification } = require('../models');
 const { Op } = require('sequelize');
+const notificationService = require('../services/notificationService');
 
 exports.getDashboardStats = async (req, res) => {
     try {
@@ -438,12 +439,68 @@ exports.reviewVerification = async (req, res) => {
             verification_refusal_reason: status === 'rejected' ? refusalReason : null
         });
 
+        // Phase 9: Integrated Notifications
+        const title = status === 'approved' ? 'تهانينا! تم توثيق حسابك 🎉' : 'عذراً! تم رفض طلب التوثيق ⚠️';
+        const messageBody = status === 'approved'
+            ? 'تمت مراجعة مستنداتك وتوثيق حسابك بنجاح. يمكنك الآن الاستمتاع بكامل ميزات المنصة.'
+            : `تم رفض طلب التوثيق للسبب التالي: ${refusalReason || 'مستندات غير واضحة'}. يرجى المحاولة مرة أخرى.`;
+
+        // 1. Create In-App Notification Record
+        await Notification.create({
+            user_id: userId,
+            role: role,
+            type: 'IDENTITY_VERIFICATION',
+            title: title,
+            message: messageBody,
+            data: { status, refusalReason }
+        });
+
+        // 2. Send Push Notification
+        await notificationService.sendPushNotification(
+            userId,
+            role,
+            title,
+            messageBody,
+            { type: 'IDENTITY_VERIFICATION', status }
+        );
+
         res.json({
             success: true,
             message: status === 'approved' ? 'تم توثيق الحساب بنجاح' : 'تم رفض طلب التوثيق'
         });
     } catch (error) {
         console.error('Review Verification Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+
+exports.getSettings = async (req, res) => {
+    try {
+        const settings = await SystemSetting.findAll({
+            order: [['key', 'ASC']]
+        });
+        res.json({ success: true, settings });
+    } catch (error) {
+        console.error('Get Settings Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.updateSettings = async (req, res) => {
+    try {
+        const { settings } = req.body; // Array of { key, value }
+
+        for (const item of settings) {
+            await SystemSetting.upsert({
+                key: item.key,
+                value: item.value.toString()
+            });
+        }
+
+        res.json({ success: true, message: 'تم تحديث الإعدادات بنجاح' });
+    } catch (error) {
+        console.error('Update Settings Error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 };
@@ -460,22 +517,46 @@ exports.getReferralStats = async (req, res) => {
             where: { description: { [Op.like]: '%مكافأة دعوة صديق%' } }
         }) || 0;
 
-        // Top Referrers (Simplified for CSV/MVP)
+        // Enhanced Influencers Logic
         const topCustomerReferrers = await Customer.findAll({
             attributes: [
-                'id', 'name', 'phone',
+                'id', 'name', 'phone', 'image_url',
                 [require('sequelize').literal('(SELECT COUNT(*) FROM customers WHERE referred_by_id = "Customer"."id")'), 'referralCount']
             ],
+            where: {
+                id: {
+                    [Op.in]: require('sequelize').literal('(SELECT DISTINCT referred_by_id FROM customers WHERE referred_by_id IS NOT NULL)')
+                }
+            },
             order: [[require('sequelize').literal('"referralCount"'), 'DESC']],
-            limit: 10
+            limit: 5
         });
+
+        const topCourierReferrers = await Courier.findAll({
+            attributes: [
+                'id', 'name', 'phone', 'image_url',
+                [require('sequelize').literal('(SELECT COUNT(*) FROM couriers WHERE referred_by_id = "Courier"."id")'), 'referralCount']
+            ],
+            where: {
+                id: {
+                    [Op.in]: require('sequelize').literal('(SELECT DISTINCT referred_by_id FROM couriers WHERE referred_by_id IS NOT NULL)')
+                }
+            },
+            order: [[require('sequelize').literal('"referralCount"'), 'DESC']],
+            limit: 5
+        });
+
+        const influencers = [
+            ...topCustomerReferrers.map(c => ({ ...c.get(), role: 'customer' })),
+            ...topCourierReferrers.map(c => ({ ...c.get(), role: 'courier' }))
+        ].sort((a, b) => b.referralCount - a.referralCount);
 
         res.json({
             success: true,
             stats: {
                 totalReferrals,
                 totalRewards: parseFloat(totalRewards).toFixed(2),
-                topReferrers: topCustomerReferrers
+                topReferrers: influencers
             }
         });
     } catch (error) {
@@ -484,3 +565,81 @@ exports.getReferralStats = async (req, res) => {
     }
 };
 
+
+exports.getChartStats = async (req, res) => {
+    try {
+        const { days = 7 } = req.query;
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - parseInt(days));
+
+        // Generate date series
+        const dateSeries = [];
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+            dateSeries.push(new Date(d).toISOString().split('T')[0]);
+        }
+
+        const chartData = await Promise.all(dateSeries.map(async (date) => {
+            const nextDay = new Date(date);
+            nextDay.setDate(nextDay.getDate() + 1);
+
+            const orderCount = await Order.count({
+                where: {
+                    createdAt: {
+                        [Op.gte]: new Date(date),
+                        [Op.lt]: nextDay
+                    }
+                }
+            });
+
+            const revenue = await Order.sum('price', {
+                where: {
+                    status: 'delivered',
+                    updatedAt: {
+                        [Op.gte]: new Date(date),
+                        [Op.lt]: nextDay
+                    }
+                }
+            }) || 0;
+
+            return {
+                date,
+                orders: orderCount,
+                revenue: parseFloat(revenue).toFixed(2)
+            };
+        }));
+
+        res.json({
+            success: true,
+            data: chartData
+        });
+    } catch (error) {
+        console.error('Get Chart Stats Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+
+exports.sendBroadcast = async (req, res) => {
+    try {
+        const { target, title, body, data } = req.body;
+
+        if (!target || !title || !body) {
+            return res.status(400).json({ success: false, error: 'Target, title and body are required' });
+        }
+
+        const result = await notificationService.sendBroadcastNotification(target, title, body, data);
+
+        if (result.success) {
+            res.json({
+                success: true,
+                message: `Broadcast sent to ${result.count} devices`
+            });
+        } else {
+            res.status(500).json({ success: false, error: result.error });
+        }
+    } catch (error) {
+        console.error('Send Broadcast Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};

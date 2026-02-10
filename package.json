@@ -1,6 +1,6 @@
 {
   "name": "masar-backend",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Masar Delivery API",
   "main": "src/server.js",
   "scripts": {

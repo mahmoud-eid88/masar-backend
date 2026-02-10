@@ -226,3 +226,54 @@ exports.reviewWithdrawal = async (req, res) => {
         res.status(400).json({ success: false, error: error.message });
     }
 };
+
+exports.getAdminFinancialStats = async (req, res) => {
+    try {
+        // 1. Gross Revenue (Total price of all delivered orders)
+        const totalGrossRevenue = await Transaction.sequelize.models.Order.sum('price', {
+            where: { status: 'delivered' }
+        }) || 0;
+
+        // 2. Net Platform Commission (Total of all 'commission' logs or derived from transactions)
+        // Since we don't log commission as a separate transaction yet, let's calculate it:
+        // (Total Gross - Total Courier Credits for orders)
+        const totalCourierCredits = await Transaction.sum('amount', {
+            where: {
+                type: 'credit',
+                description: { [Op.like]: '%صافي ربح الرحلة%' }
+            }
+        }) || 0;
+
+        const netProfit = totalGrossRevenue - totalCourierCredits;
+
+        // 3. Total Payouts (Completed withdrawal transactions)
+        const totalPayouts = await Transaction.sum('amount', {
+            where: {
+                type: 'debit',
+                status: 'completed',
+                description: { [Op.like]: '%سحب%' }
+            }
+        }) || 0;
+
+        // 4. Pending Withdrawals
+        const pendingPayoutsCount = await Transaction.count({
+            where: {
+                type: 'debit',
+                status: 'pending'
+            }
+        });
+
+        res.json({
+            success: true,
+            stats: {
+                totalGrossRevenue: parseFloat(totalGrossRevenue).toFixed(2),
+                netProfit: parseFloat(netProfit).toFixed(2),
+                totalPayouts: parseFloat(totalPayouts).toFixed(2),
+                pendingPayoutsCount
+            }
+        });
+    } catch (error) {
+        console.error('Get Admin Financial Stats Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};

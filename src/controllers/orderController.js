@@ -2,6 +2,7 @@ const { Order, Customer, Courier, Wallet, Transaction, Rating, Notification, Neg
 const pricingService = require('../services/pricingService');
 const referralService = require('../services/referralService');
 const pushService = require('../services/notificationService');
+const geofenceService = require('../services/geofenceService');
 const adminController = require('./adminController');
 
 exports.estimatePrice = async (req, res) => {
@@ -13,6 +14,23 @@ exports.estimatePrice = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: 'Missing location coordinates'
+            });
+        }
+
+        // Phase 11: Geofence Check
+        const pickupCheck = await geofenceService.isWithinOperationalBounds(parseFloat(pickupLat), parseFloat(pickupLng));
+        if (!pickupCheck.allowed) {
+            return res.status(403).json({
+                success: false,
+                message: 'عذراً، منطقة الاستلام خارج نطاق الخدمة حالياً'
+            });
+        }
+
+        const dropoffCheck = await geofenceService.isWithinOperationalBounds(parseFloat(dropoffLat), parseFloat(dropoffLng));
+        if (!dropoffCheck.allowed) {
+            return res.status(403).json({
+                success: false,
+                message: 'عذراً، منطقة التسليم خارج نطاق الخدمة حالياً'
             });
         }
 
@@ -78,6 +96,14 @@ exports.createOrder = async (req, res) => {
             order_type,
             promoCode
         } = req.body;
+
+        // Phase 11: Geofence Validation during creation
+        if (pickup_location && pickup_location.lat) {
+            const boundsCheck = await geofenceService.isWithinOperationalBounds(pickup_location.lat, pickup_location.lng);
+            if (!boundsCheck.allowed) {
+                return res.status(403).json({ success: false, message: 'منطقة الطلب خارج حدود الخدمة' });
+            }
+        }
 
         // 1. Determine promo discount if applicable
         let discount = 0;
@@ -257,6 +283,9 @@ exports.acceptOrder = async (req, res) => {
         const io = req.app.get('io');
         io.to(`order_${order.id}`).emit('order_status_updated', { order_id, status: 'accepted' });
 
+        // Notify other couriers that this order is taken
+        io.emit('order_taken', { order_id: order.id });
+
         // Send Push Notification
         pushService.sendPushNotification(
             order.customer_id,
@@ -349,8 +378,11 @@ exports.updateOrderStatus = async (req, res) => {
             }
 
             if (status === 'delivered' && order.courier_id) {
-                // Commission logic: Platform takes 10%
-                const commissionRate = 0.10;
+                // Phase 8: Dynamic Commission from System Settings
+                const { SystemSetting } = require('../models');
+                const commissionSetting = await SystemSetting.findOne({ where: { key: 'platform_commission_rate' } });
+                const commissionRate = commissionSetting ? parseFloat(commissionSetting.value) / 100 : 0.10; // Default 10% if not set
+
                 const totalPrice = parseFloat(order.price);
                 const commission = totalPrice * commissionRate;
                 const netEarning = totalPrice - commission;
@@ -481,6 +513,15 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 exports.getAcceptedOrders = async (req, res) => {
     try {
         const { courier_id } = req.params;
+
+        // Validate courier_id
+        if (!courier_id || courier_id === 'undefined' || courier_id === 'null') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid courier ID provided'
+            });
+        }
+
         const orders = await Order.findAll({
             where: {
                 courier_id,
@@ -535,7 +576,8 @@ exports.getOrderDetails = async (req, res) => {
         const order = await Order.findByPk(order_id, {
             include: [
                 { model: Customer, attributes: ['id', 'name', 'phone'] },
-                { model: Courier, attributes: ['id', 'name', 'phone', 'vehicle_type', 'vehicle_plate', 'rating', 'verification_status', 'profile_image'] }
+                { model: Courier, attributes: ['id', 'name', 'phone', 'vehicle_type', 'vehicle_plate', 'rating', 'verification_status', 'profile_image'] },
+                { model: OrderTracking, separate: true, order: [['timestamp', 'ASC']] }
             ]
         });
 
@@ -793,6 +835,8 @@ exports.respondToProposal = async (req, res) => {
             return res.status(404).json({ success: false, message: 'الطلب غير موجود' });
         }
 
+        const io = req.app.get('io');
+
         if (response === 'accept') {
             await order.update({
                 price: order.proposed_price, // Update actual price
@@ -811,7 +855,6 @@ exports.respondToProposal = async (req, res) => {
             });
 
             // Notify courier
-            const io = req.app.get('io');
             io.emit('order_assigned', { // Broadcast to all or specific courier
                 courier_id: courier_id,
                 order: order.toJSON()

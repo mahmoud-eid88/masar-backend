@@ -43,5 +43,17 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-module.exports = { authenticateToken };
+const authorizeRoles = (...roles) => {
+    return (req, res, next) => {
+        if (!req.user || !roles.includes(req.user.role)) {
+            return res.status(403).json({
+                success: false,
+                message: 'ليس لديك صلاحية للوصول لهذا المورد'
+            });
+        }
+        next();
+    };
+};
+
+module.exports = { authenticateToken, authorizeRoles };
 

@@ -109,7 +109,12 @@ const Customer = sequelize.define('Customer', {
     }
 }, {
     tableName: 'customers',
-    timestamps: true
+    timestamps: true,
+    indexes: [
+        { unique: true, fields: ['email'] },
+        { fields: ['phone'] },
+        { unique: true, fields: ['referral_code'] }
+    ]
 });
 
 module.exports = Customer;

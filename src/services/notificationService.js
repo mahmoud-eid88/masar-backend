@@ -66,3 +66,54 @@ exports.updateFcmToken = async (userId, role, token) => {
         return false;
     }
 };
+/**
+ * Send broadcast notification to multiple users
+ */
+exports.sendBroadcastNotification = async (target, title, body, data = {}) => {
+    try {
+        let tokens = [];
+        if (target === 'customers' || target === 'all') {
+            const customers = await Customer.findAll({ where: { fcm_token: { [require('sequelize').Op.ne]: null } } });
+            tokens = [...tokens, ...customers.map(c => c.fcm_token)];
+        }
+        if (target === 'couriers' || target === 'all') {
+            const couriers = await Courier.findAll({ where: { fcm_token: { [require('sequelize').Op.ne]: null } } });
+            tokens = [...tokens, ...couriers.map(c => c.fcm_token)];
+        }
+
+        if (tokens.length === 0) return { success: true, count: 0 };
+
+        console.log(`[BROADCAST DISPATCH] To: ${tokens.length} devices | Title: ${title}`);
+
+        if (isFirebaseInitialized) {
+            const message = {
+                notification: { title, body },
+                data: {
+                    ...data,
+                    click_action: 'FLUTTER_NOTIFICATION_CLICK'
+                },
+                android: {
+                    priority: 'high',
+                    notification: {
+                        sound: 'default',
+                        channelId: 'masar_notifications'
+                    }
+                }
+            };
+
+            // Firebase supports multicast sending
+            const response = await admin.messaging().sendMulticast({
+                tokens: tokens,
+                ...message
+            });
+            console.log(`✅ Broadcast sent: ${response.successCount} success, ${response.failureCount} failure`);
+            return { success: true, count: response.successCount };
+        } else {
+            console.log(`📝 Broadcast (Simulated): ${title} to ${tokens.length} devices`);
+            return { success: true, count: tokens.length };
+        }
+    } catch (error) {
+        console.error('Broadcast error:', error);
+        return { success: false, error: error.message };
+    }
+};

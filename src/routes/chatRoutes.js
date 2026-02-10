@@ -11,6 +11,9 @@ router.get('/order/:orderId/info', chatController.getOrderChatInfo);
 router.get('/order/:orderId/messages', chatController.getMessages);
 router.post('/order/:orderId/send', chatController.sendOrderMessage);
 router.post('/order/:orderId/read', chatController.markAsRead);
+router.get('/order/:orderId/unread', chatController.getUnreadCount);
+router.get('/unread', chatController.getUnreadCounts);
 
 module.exports = router;
+
 

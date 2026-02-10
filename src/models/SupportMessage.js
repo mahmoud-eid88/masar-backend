@@ -7,6 +7,10 @@ const SupportMessage = sequelize.define('SupportMessage', {
         primaryKey: true,
         autoIncrement: true
     },
+    ticket_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true // NULL for legacy messages, required for new workflow
+    },
     user_id: {
         type: DataTypes.STRING,
         allowNull: false

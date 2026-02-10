@@ -113,7 +113,13 @@ const Courier = sequelize.define('Courier', {
     }
 }, {
     tableName: 'couriers',
-    timestamps: true
+    timestamps: true,
+    indexes: [
+        { unique: true, fields: ['email'] },
+        { fields: ['phone'] },
+        { unique: true, fields: ['referral_code'] },
+        { fields: ['availability'] }
+    ]
 });
 
 module.exports = Courier;

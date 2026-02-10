@@ -1,17 +1,31 @@
 const { Order } = require('../models');
 
 /**
- * Simple distance calculation between two points (Haversine formula or Euclidean for simplicity)
+ * Calculate distance between two points using Haversine formula
+ * @param {Array} p1 [lng, lat]
+ * @param {Array} p2 [lng, lat]
+ * @returns {number} Distance in meters
  */
 const calculateDistance = (p1, p2) => {
-    const lat1 = p1[1];
-    const lon1 = p1[0];
-    const lat2 = p2[1];
-    const lon2 = p2[0];
+    const toRad = (value) => (value * Math.PI) / 180;
 
-    // Using simple Euclidean distance for small areas (like a city)
-    // For more accuracy, use Haversine formula
-    return Math.sqrt(Math.pow(lat2 - lat1, 2) + Math.pow(lon2 - lon1, 2));
+    const lon1 = p1[0];
+    const lat1 = p1[1];
+    const lon2 = p2[0];
+    const lat2 = p2[1];
+
+    const R = 6371e3; // Earth radius in meters
+    const phi1 = toRad(lat1);
+    const phi2 = toRad(lat2);
+    const deltaPhi = toRad(lat2 - lat1);
+    const deltaLambda = toRad(lon2 - lon1);
+
+    const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+        Math.cos(phi1) * Math.cos(phi2) *
+        Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
 };
 
 exports.optimizeRoute = async (req, res) => {

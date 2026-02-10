@@ -30,6 +30,7 @@ router.post('/create', validate(schemas.order.create), createOrder); // 🩹 FIX
 router.post('/:order_id/accept', acceptOrder);
 router.patch('/:order_id/status', updateOrderStatus);
 router.get('/nearby', getNearbyOrders);
+router.get('/active', getCustomerOrders); // Alias for backwards compatibility
 router.get('/customer/:customer_id', getCustomerOrders);
 router.get('/customer/:customer_id/history', getCustomerOrderHistory);
 router.get('/courier/:courier_id/history', getCourierOrderHistory);

@@ -29,6 +29,12 @@ io.on('connection', (socket) => {
         console.log(`👤 Socket ${socket.id} joined room: ${roomName}`);
     });
 
+    // Alternative room join (used by OrderChatScreen)
+    socket.on('join_room', (roomName) => {
+        socket.join(roomName);
+        console.log(`👤 Socket ${socket.id} joined room: ${roomName}`);
+    });
+
     // Join admin room for stats updates
     socket.on('join_admin_room', () => {
         socket.join('admin_room');
