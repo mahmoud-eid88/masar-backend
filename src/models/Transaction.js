@@ -30,6 +30,18 @@ const Transaction = sequelize.define('Transaction', {
     status: {
         type: DataTypes.ENUM('pending', 'completed', 'rejected'),
         defaultValue: 'completed'
+    },
+    payment_method: {
+        type: DataTypes.ENUM('card', 'vodafone_cash', 'orange_cash', 'etisalat_cash', 'fawry', 'instapay', 'admin', 'order_earning'),
+        allowNull: true
+    },
+    payment_reference: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    card_last_four: {
+        type: DataTypes.STRING(4),
+        allowNull: true
     }
 }, {
     tableName: 'transactions',
