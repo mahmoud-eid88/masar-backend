@@ -576,8 +576,7 @@ exports.getOrderDetails = async (req, res) => {
         const order = await Order.findByPk(order_id, {
             include: [
                 { model: Customer, attributes: ['id', 'name', 'phone'] },
-                { model: Courier, attributes: ['id', 'name', 'phone', 'vehicle_type', 'vehicle_plate', 'rating', 'verification_status', 'profile_image'] },
-                { model: OrderTracking, separate: true, order: [['timestamp', 'ASC']] }
+                { model: Courier, attributes: ['id', 'name', 'phone', 'vehicle_type', 'vehicle_plate', 'rating', 'verification_status', 'profile_image'] }
             ]
         });
 
